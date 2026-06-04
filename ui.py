@@ -11,11 +11,13 @@ class SpotlightUI:
 
     def __init__(self, config: dict,
                  on_search: Callable[[str], List[Dict[str, str]]],
-                 on_translate: Callable[[str, Callable, Optional[Callable]], None]):
+                 on_translate: Callable[[str, Callable, Optional[Callable]], None],
+                 history=None):
         self.cfg = config
         self.ui_cfg = config["ui"]
         self.on_search = on_search
         self.on_translate = on_translate
+        self.history = history
         self.opacity = self.ui_cfg["opacity"]
         self._visible = False
         self._selected_idx = -1
@@ -368,6 +370,19 @@ class SpotlightUI:
         self._matches = []
         self._ai_pending_query = None
         self.listbox.delete(0, tk.END)
+        # 显示最近查词历史
+        if self.history:
+            recent = self.history.get_recent(8)
+            if recent:
+                for h in recent:
+                    word = h.get("word", "")
+                    defn = h.get("definition", "")
+                    time = h.get("time", "")
+                    if len(defn) > 18:
+                        defn = defn[:18] + "…"
+                    self.listbox.insert(tk.END, f"  🕐 {word}  {defn}  {time}")
+                self._set_definition("最近查词", "输入新的单词开始查询，或从历史中选择")
+                return
         self._set_definition("输入单词开始查询…", "")
 
     # ── 键盘导航 ──
@@ -422,10 +437,22 @@ class SpotlightUI:
 
     def _on_list_select(self, event):
         sel = self.listbox.curselection()
-        if sel and self._matches:
-            self._selected_idx = sel[0]
-            if self._selected_idx < len(self._matches):
-                self._show_definition(self._selected_idx)
+        if not sel:
+            return
+        idx = sel[0]
+        # 普通搜索结果
+        if self._matches and idx < len(self._matches):
+            self._selected_idx = idx
+            self._show_definition(idx)
+        # 历史记录点击 → 搜索该词
+        elif self.history:
+            recent = self.history.get_recent(8)
+            if idx < len(recent):
+                word = recent[idx].get("word", "")
+                if word:
+                    self.entry.delete(0, tk.END)
+                    self.entry.insert(0, word)
+                    self._do_search()
 
     def _on_double_click(self, event):
         sel = self.listbox.curselection()
@@ -441,7 +468,12 @@ class SpotlightUI:
         """选中即展示完整释义"""
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
-            self._set_definition(m["word"], m.get("definition", "无释义"))
+            word = m["word"]
+            defn = m.get("definition", "无释义")
+            self._set_definition(word, defn)
+            # 记录到查词历史
+            if self.history:
+                self.history.add(word, defn)
 
     def _set_definition(self, title: str, content: str):
         self.def_title.config(text=title)
@@ -469,6 +501,9 @@ class SpotlightUI:
         self.entry.focus_set()
         self.entry.select_range(0, tk.END)
         self._visible = True
+        # 唤出时如果搜索框为空，显示历史
+        if not self.entry.get().strip():
+            self._clear_matches()
 
     def _save_position(self):
         """保存当前窗口位置"""

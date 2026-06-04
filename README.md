@@ -1,25 +1,26 @@
 # Quick Translate 📖🔍
 
-轻量级 Windows 查词翻译工具，模拟 macOS Spotlight 体验。
+轻量级 Windows 查词翻译工具，Spotlight 风格体验。
 
 ## ✨ 功能特性
 
 - **全局快捷键** `Shift+Ctrl+M` 随时唤出
-- **实时匹配** 输入即搜，毫秒级响应
-- **本地词典** 66,818 词条牛津高阶英汉双解（第10版），离线可用
-- **AI 翻译** 支持 OpenAI 兼容 API（按 Tab 触发）
-- **透明度调节** 底部滑块自由调整窗口透明度
-- **暗色主题** Catppuccin Mocha 配色，护眼舒适
-- **零依赖** 仅需 Python + tkinter，无需安装第三方库
+- **实时匹配** 输入即搜，选中即展示完整释义
+- **本地词典** 66,818 词条牛津高阶英汉双解（第10版）
+- **AI 翻译** 本地无结果时自动提示，Enter 一键翻译
+- **查词历史** 自动记录最近 50 条查询，唤出即显示
+- **系统托盘** 最小化到托盘，右键菜单管理
+- **透明度调节** 设置按钮可调 10%~90%，失焦自动变透明
+- **窗口拖拽** 搜索栏、释义面板、顶部栏均可拖拽
+- **剪贴板** 点击释义区域自动复制
+- **暗色主题** Catppuccin Mocha 配色
+- **零依赖** 仅需 Python + tkinter
 
 ## 🚀 快速开始
 
 ```bash
-# 直接运行
 python main.py
-
-# 或双击
-start.bat
+# 或双击 start.bat
 ```
 
 ## ⌨️ 快捷键
@@ -27,19 +28,18 @@ start.bat
 | 快捷键 | 功能 |
 |--------|------|
 | `Shift+Ctrl+M` | 唤出/隐藏窗口 |
-| `↑↓` | 选择候选词 |
-| `Enter` | 查看完整释义 |
-| `Tab` | AI 翻译当前输入 |
+| `↑↓` | 选择候选词（选中即展示释义）|
+| `Enter` | AI 翻译 |
+| `Tab` | AI 翻译（兼容）|
 | `Esc` | 关闭窗口 |
 
 ## ⚙️ 配置
 
-首次运行后，在 `~/.quick-translate/config.json` 中配置：
+首次运行自动生成 `~/.quick-translate/config.json`：
 
 ```json
 {
   "ai": {
-    "enabled": true,
     "api_base": "https://api.openai.com/v1",
     "api_key": "sk-xxx",
     "model": "gpt-4o-mini"
@@ -47,7 +47,7 @@ start.bat
 }
 ```
 
-支持任何 OpenAI 兼容 API（如 DeepSeek、Ollama、vLLM 等）。
+支持任何 OpenAI 兼容 API（DeepSeek、Ollama、mimo 等）。
 
 ## 📁 项目结构
 
@@ -56,23 +56,14 @@ quick-translate/
 ├── main.py          # 入口
 ├── config.py        # 配置管理
 ├── hotkey.py        # 全局热键 (RegisterHotKey)
-├── ui.py            # tkinter UI
-├── dictionary.py    # 本地词典
+├── ui.py            # Spotlight 风格 UI
+├── dictionary.py    # 本地词典查询
 ├── translator.py    # AI 翻译引擎
+├── history.py       # 查词历史记录
+├── tray.py          # 系统托盘图标
 ├── start.bat        # Windows 启动脚本
 └── data/dict/
     └── ecdict.json  # 牛津高阶英汉双解 (66,818 词)
-```
-
-## 🔧 扩展词典
-
-替换 `data/dict/ecdict.json`，格式为 JSON 对象：
-
-```json
-{
-  "word": "释义",
-  "hello": "int. 你好"
-}
 ```
 
 ## 📝 系统要求

@@ -12,6 +12,8 @@ from config import load_config, save_config
 from hotkey import HotkeyListener
 from dictionary import Dictionary
 from translator import AITranslator
+from history import SearchHistory
+from tray import SystemTrayIcon
 from ui import SpotlightUI
 
 
@@ -33,22 +35,30 @@ def main():
         system_prompt=cfg["ai"]["system_prompt"],
     )
 
-    # 搜索函数
+    # 初始化查词历史
+    history = SearchHistory(max_size=50)
+
+    # 搜索函数（查本地词典 + 历史）
     def search(query: str):
         return dictionary.search_fuzzy(query, limit=20)
 
     # 翻译函数
     def translate(text, callback, error_callback):
         if not ai.is_configured:
-            error_callback("AI 翻译未配置。请在 ~/.quick-translate/config.json 中设置 api_key 和 api_base")
+            error_callback("AI 翻译未配置。请在 ~/.quick-translate/config.json 中设置 api_key")
             return
         if not cfg["ai"]["enabled"]:
             error_callback("AI 翻译已禁用")
             return
         ai.translate(text, callback, error_callback)
 
-    # 构建 UI（传完整 cfg，UI 需要读 window_position 等）
-    ui = SpotlightUI(cfg, on_search=search, on_translate=translate)
+    # 构建 UI
+    ui = SpotlightUI(
+        cfg,
+        on_search=search,
+        on_translate=translate,
+        history=history,
+    )
 
     # 热键回调
     def on_hotkey():
@@ -63,6 +73,14 @@ def main():
     )
     hk.start()
 
+    # 系统托盘
+    tray = SystemTrayIcon(
+        tooltip="Quick Translate (Shift+Ctrl+M)",
+        on_toggle=lambda: ui.root.after(0, ui.toggle),
+        on_exit=lambda: ui.root.after(0, ui.root.destroy),
+    )
+    tray.start()
+
     print(f"[QuickTranslate] Ready! Press Shift+Ctrl+M to open.")
     print(f"[QuickTranslate] Dictionary: {dictionary.word_count} words loaded")
     if ai.is_configured:
@@ -73,10 +91,11 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        # 退出前保存窗口位置和配置
+        # 退出前保存状态
         ui._save_position()
         cfg["window_position"] = cfg.get("window_position", {})
         save_config(cfg)
+        tray.stop()
         hk.stop()
         print("[QuickTranslate] Bye!")
 
