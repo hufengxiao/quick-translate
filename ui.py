@@ -1,4 +1,4 @@
-"""主窗口 UI - 模拟 macOS Spotlight 风格"""
+"""主窗口 UI - Spotlight 风格查词工具"""
 import tkinter as tk
 from tkinter import font as tkfont
 import ctypes
@@ -12,14 +12,17 @@ class SpotlightUI:
     def __init__(self, config: dict,
                  on_search: Callable[[str], List[Dict[str, str]]],
                  on_translate: Callable[[str, Callable, Optional[Callable]], None]):
-        self.cfg = config["ui"]
+        self.cfg = config
+        self.ui_cfg = config["ui"]
         self.on_search = on_search
         self.on_translate = on_translate
-        self.opacity = self.cfg["opacity"]
+        self.opacity = self.ui_cfg["opacity"]
         self._visible = False
         self._selected_idx = -1
         self._matches: List[Dict[str, str]] = []
         self._settings_win = None
+        self._toast_after = None
+        self._ai_pending_query = None  # 待 AI 翻译的查询
 
         self._build_window()
         self._build_widgets()
@@ -30,24 +33,26 @@ class SpotlightUI:
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", self.opacity)
-        self.root.configure(bg=self.cfg["bg_color"])
+        self.root.configure(bg=self.ui_cfg["bg_color"])
 
-        w, h = self.cfg["width"], self.cfg["height"]
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
-        x = (sw - w) // 2
-        y = (sh - h) // 3
+        w, h = self.ui_cfg["width"], self.ui_cfg["height"]
+        # 恢复上次窗口位置
+        pos = self.cfg.get("window_position")
+        if pos and "x" in pos and "y" in pos:
+            x, y = pos["x"], pos["y"]
+        else:
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            x = (sw - w) // 2
+            y = (sh - h) // 3
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
         # Windows 11 圆角
         try:
             hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
-            DWMWA_WINDOW_CORNER_PREFERENCE = 33
-            preference = ctypes.c_int(2)
+            pref = ctypes.c_int(2)
             ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                ctypes.byref(preference), ctypes.sizeof(preference)
-            )
+                hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
         except Exception:
             pass
 
@@ -55,7 +60,6 @@ class SpotlightUI:
         self.root.bind("<FocusIn>", self._on_focus_in)
         self.root.bind("<FocusOut>", self._on_focus_out)
 
-        # 拖拽状态
         self._drag_x = 0
         self._drag_y = 0
 
@@ -85,28 +89,25 @@ class SpotlightUI:
         if self._settings_win is None:
             self.root.attributes("-alpha", 0.1)
 
-    # ── 按钮交互状态 ──
+    # ── 按钮 ──
 
-    def _make_icon_btn(self, parent, text, normal_fg="#585b70",
-                       hover_fg="#cdd6f4", press_fg="#89b4fa",
-                       hover_bg="#313244", press_bg="#45475a",
-                       command=None):
-        """创建带 hover / press 状态的图标按钮"""
-        bg = self.cfg["bg_color"]
-        btn = tk.Label(parent, text=text, bg=bg, fg=normal_fg,
+    def _make_icon_btn(self, parent, text, command=None):
+        cfg = self.ui_cfg
+        bg = cfg["bg_color"]
+        btn = tk.Label(parent, text=text, bg=bg, fg="#585b70",
                        font=("Segoe UI", 11), cursor="hand2", padx=4, pady=2)
 
         def on_enter(e):
-            btn.config(fg=hover_fg, bg=hover_bg)
+            btn.config(fg="#cdd6f4", bg="#313244")
 
         def on_leave(e):
-            btn.config(fg=normal_fg, bg=bg)
+            btn.config(fg="#585b70", bg=bg)
 
         def on_press(e):
-            btn.config(fg=press_fg, bg=press_bg)
+            btn.config(fg="#89b4fa", bg="#45475a")
 
         def on_release(e):
-            btn.config(fg=hover_fg, bg=hover_bg)
+            btn.config(fg="#cdd6f4", bg="#313244")
             if command:
                 command()
 
@@ -124,21 +125,19 @@ class SpotlightUI:
             self._settings_win = None
             return
 
-        cfg = self.cfg
+        cfg = self.ui_cfg
         win = tk.Toplevel(self.root)
         win.overrideredirect(True)
         win.attributes("-topmost", True)
-        win.attributes("-alpha", self.opacity)  # 跟随主窗口透明度
+        win.attributes("-alpha", self.opacity)
         win.configure(bg=cfg["entry_bg"])
         self._settings_win = win
 
-        # 定位在主窗口右侧下方
         rx = self.root.winfo_x()
         ry = self.root.winfo_y()
         rw = self.root.winfo_width()
         win.geometry(f"220x70+{rx + rw - 220}+{ry + 5}")
 
-        # 圆角
         try:
             hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
             pref = ctypes.c_int(2)
@@ -154,18 +153,16 @@ class SpotlightUI:
 
         def on_slider(v):
             self._set_opacity(float(v))
-            win.attributes("-alpha", float(v))  # 弹窗也跟着变
+            win.attributes("-alpha", float(v))
 
-        slider = tk.Scale(
+        tk.Scale(
             win, from_=0.1, to=0.9, resolution=0.1,
-            orient=tk.HORIZONTAL, variable=var,
-            command=on_slider,
+            orient=tk.HORIZONTAL, variable=var, command=on_slider,
             bg=cfg["entry_bg"], fg="#cdd6f4",
             highlightthickness=0, troughcolor=cfg["bg_color"],
             sliderrelief=tk.FLAT, length=190, showvalue=True,
             bd=0, font=("Segoe UI", 8),
-        )
-        slider.pack(padx=10, pady=(0, 6))
+        ).pack(padx=10, pady=(0, 6))
 
         def close_settings(e=None):
             if self._settings_win:
@@ -179,13 +176,30 @@ class SpotlightUI:
         self.opacity = value
         self.root.attributes("-alpha", self.opacity)
 
+    # ── Toast 提示 ──
+
+    def _show_toast(self, text, duration=2000):
+        """在窗口底部显示一个轻量 toast 提示"""
+        if self._toast_after:
+            self.root.after_cancel(self._toast_after)
+            if hasattr(self, '_toast_label') and self._toast_label:
+                self._toast_label.destroy()
+
+        self._toast_label = tk.Label(
+            self.root, text=text, font=("Segoe UI", 9),
+            bg="#45475a", fg="#cdd6f4", padx=10, pady=4,
+        )
+        self._toast_label.place(relx=0.5, rely=0.95, anchor="s")
+        self._toast_after = self.root.after(
+            duration, lambda: self._toast_label.destroy() if self._toast_label else None)
+
     # ── 构建 UI ──
 
     def _build_widgets(self):
-        cfg = self.cfg
+        cfg = self.ui_cfg
         fs = cfg["font_size"]
         default_font = tkfont.Font(family="Segoe UI", size=fs)
-        small_font = tkfont.Font(family="Segoe UI", size=fs - 2)
+        small_font = tkfont.Font(family="Segoe UI", size=fs - 1)
         bold_font = tkfont.Font(family="Segoe UI", size=fs, weight="bold")
         mono_font = tkfont.Font(family="Consolas", size=10)
 
@@ -199,21 +213,19 @@ class SpotlightUI:
         top_bar.pack_propagate(False)
         self._bind_drag(top_bar)
 
-        # 右侧按钮（先 pack，靠右）
         close_btn = self._make_icon_btn(top_bar, "✕", command=self.hide)
         close_btn.pack(side=tk.RIGHT, padx=(2, 4))
 
         settings_btn = self._make_icon_btn(top_bar, "⚙", command=self._open_settings)
         settings_btn.pack(side=tk.RIGHT, padx=(0, 2))
 
-        # 拖拽把手 — 相对 top_bar 居中（top_bar 是全宽的）
         handle = tk.Label(top_bar, text="⠿", bg=cfg["bg_color"], fg="#585b70",
                           font=("Segoe UI", 13), cursor="fleur")
         handle.place(relx=0.5, rely=0.5, anchor="center")
         self._bind_drag(handle)
 
         # ── 搜索栏 ──
-        search_frame = tk.Frame(main, bg=cfg["entry_bg"], height=40)
+        search_frame = tk.Frame(main, bg=cfg["entry_bg"], height=42)
         search_frame.pack(fill=tk.X, padx=10, pady=(4, 4))
         search_frame.pack_propagate(False)
         self._bind_drag(search_frame)
@@ -229,7 +241,15 @@ class SpotlightUI:
             insertbackground=cfg["accent_color"],
             relief=tk.FLAT, highlightthickness=0,
         )
-        self.entry.pack(fill=tk.BOTH, expand=True, padx=(0, 8), pady=8)
+        self.entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4), pady=8)
+
+        # 清空按钮（初始隐藏）
+        self._clear_btn = tk.Label(
+            search_frame, text="✕", bg=cfg["entry_bg"], fg="#585b70",
+            font=("Segoe UI", 9), cursor="hand2", padx=6)
+        self._clear_btn.bind("<Button-1>", lambda e: self._clear_input())
+        self._clear_btn.bind("<Enter>", lambda e: self._clear_btn.config(fg="#cdd6f4"))
+        self._clear_btn.bind("<Leave>", lambda e: self._clear_btn.config(fg="#585b70"))
 
         self.entry.bind("<Key>", self._on_key)
         self.entry.bind("<Down>", self._on_arrow_down)
@@ -237,7 +257,7 @@ class SpotlightUI:
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<Tab>", self._on_tab)
 
-        # ── 候选列表 ──
+        # ── 候选列表（占据大部分空间）──
         list_frame = tk.Frame(main, bg=cfg["list_bg"])
         list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
 
@@ -257,7 +277,7 @@ class SpotlightUI:
 
         # ── 释义面板 ──
         def_frame = tk.Frame(main, bg=cfg["bg_color"])
-        def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 2))
+        def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
         self._bind_drag(def_frame)
 
         self.def_title = tk.Label(
@@ -274,16 +294,20 @@ class SpotlightUI:
             wrap=tk.WORD, state=tk.DISABLED, cursor="arrow",
         )
         self.def_text.pack(fill=tk.BOTH, expand=True)
+        # 点击释义区域复制到剪贴板
+        self.def_text.bind("<Button-1>", self._on_copy_definition)
 
-        # ── 底栏 ──
-        bottom = tk.Frame(main, bg=cfg["bg_color"], height=20)
-        bottom.pack(fill=tk.X, padx=10, pady=(0, 6))
-        bottom.pack_propagate(False)
-        self._bind_drag(bottom)
+        # 首次启动 toast
+        self.root.after(500, lambda: self._show_toast(
+            "Shift+Ctrl+M 唤出  |  ↑↓选择  |  Enter AI翻译", 4000))
 
-        tk.Label(bottom, text="Esc关闭  ↑↓选择  Enter展开  Tab翻译",
-                 font=("Segoe UI", 8), bg=cfg["bg_color"], fg="#45475a"
-                 ).pack(side=tk.LEFT)
+    # ── 清空输入 ──
+
+    def _clear_input(self):
+        self.entry.delete(0, tk.END)
+        self._clear_matches()
+        self.entry.focus_set()
+        self._clear_btn.pack_forget()
 
     # ── 搜索逻辑 ──
 
@@ -296,34 +320,53 @@ class SpotlightUI:
 
     def _do_search(self):
         query = self.entry.get().strip()
+
+        # 控制清空按钮显隐
+        if query:
+            self._clear_btn.pack(side=tk.RIGHT, padx=(0, 6))
+        else:
+            self._clear_btn.pack_forget()
+
         if not query:
             self._clear_matches()
             return
+
         try:
             self._matches = self.on_search(query)
-            self._update_listbox()
+            self._update_listbox(query)
         except Exception as e:
             self._set_definition("搜索出错", str(e))
             traceback.print_exc()
 
-    def _update_listbox(self):
+    def _update_listbox(self, query: str = ""):
         self.listbox.delete(0, tk.END)
         self._selected_idx = -1
+        self._ai_pending_query = None
+
+        if not self._matches:
+            # 无本地匹配 — 提示 AI 翻译
+            self.listbox.insert(tk.END, f"  🤖 本地无结果，按 Enter AI 翻译")
+            self._ai_pending_query = query
+            self._set_definition("未找到本地释义", f"按 Enter 使用 AI 翻译 \"{query}\"")
+            return
+
         for m in self._matches:
             word = m["word"]
             defn = m.get("definition", "").split("\n")[0]
-            max_len = 20
+            max_len = 22
             if len(defn) > max_len:
                 defn = defn[:max_len] + "…"
             self.listbox.insert(tk.END, f"  {word}  {defn}")
-        if self._matches:
-            self.listbox.selection_set(0)
-            self.listbox.activate(0)
-            self._selected_idx = 0
-            self._show_definition(0)
+
+        # 选中第一个，直接展示释义（选中即展示）
+        self.listbox.selection_set(0)
+        self.listbox.activate(0)
+        self._selected_idx = 0
+        self._show_definition(0)
 
     def _clear_matches(self):
         self._matches = []
+        self._ai_pending_query = None
         self.listbox.delete(0, tk.END)
         self._set_definition("输入单词开始查询…", "")
 
@@ -348,16 +391,26 @@ class SpotlightUI:
         return "break"
 
     def _on_enter(self, event):
+        # 有 AI 待翻译的查询 → 触发 AI
+        if self._ai_pending_query:
+            self._trigger_ai(self._ai_pending_query)
+            return "break"
+        # 有选中词条 → 触发 AI 翻译该词条
         if 0 <= self._selected_idx < len(self._matches):
-            self._show_full_definition(self._selected_idx)
+            word = self._matches[self._selected_idx]["word"]
+            self._trigger_ai(word)
         return "break"
 
     def _on_tab(self, event):
+        # Tab 也触发 AI（兼容旧习惯）
         query = self.entry.get().strip()
         if query:
-            self._set_definition("🤖 AI 翻译中…", "正在调用 AI 翻译引擎，请稍候…")
-            self.on_translate(query, self._on_ai_result, self._on_ai_error)
+            self._trigger_ai(query)
         return "break"
+
+    def _trigger_ai(self, query: str):
+        self._set_definition("🤖 AI 翻译中…", f"正在翻译 \"{query}\"，请稍候…")
+        self.on_translate(query, self._on_ai_result, self._on_ai_error)
 
     def _on_ai_result(self, text: str):
         self.root.after(0, lambda: self._set_definition("🤖 AI 翻译结果", text))
@@ -369,28 +422,26 @@ class SpotlightUI:
 
     def _on_list_select(self, event):
         sel = self.listbox.curselection()
-        if sel:
+        if sel and self._matches:
             self._selected_idx = sel[0]
-            self._show_definition(self._selected_idx)
+            if self._selected_idx < len(self._matches):
+                self._show_definition(self._selected_idx)
 
     def _on_double_click(self, event):
         sel = self.listbox.curselection()
-        if sel:
-            self._selected_idx = sel[0]
-            self._show_full_definition(self._selected_idx)
+        if sel and self._matches:
+            idx = sel[0]
+            if idx < len(self._matches):
+                word = self._matches[idx]["word"]
+                self._trigger_ai(word)
 
     # ── 释义显示 ──
 
     def _show_definition(self, idx: int):
+        """选中即展示完整释义"""
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
             self._set_definition(m["word"], m.get("definition", "无释义"))
-
-    def _show_full_definition(self, idx: int):
-        if 0 <= idx < len(self._matches):
-            m = self._matches[idx]
-            full = m.get("definition", "无释义")
-            self._set_definition(f"📖 {m['word']}", full)
 
     def _set_definition(self, title: str, content: str):
         self.def_title.config(text=title)
@@ -399,6 +450,15 @@ class SpotlightUI:
         if content:
             self.def_text.insert("1.0", content)
         self.def_text.config(state=tk.DISABLED)
+
+    # ── 复制释义 ──
+
+    def _on_copy_definition(self, event=None):
+        content = self.def_text.get("1.0", tk.END).strip()
+        if content:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            self._show_toast("已复制到剪贴板 ✓", 1500)
 
     # ── 窗口显隐 ──
 
@@ -410,7 +470,15 @@ class SpotlightUI:
         self.entry.select_range(0, tk.END)
         self._visible = True
 
+    def _save_position(self):
+        """保存当前窗口位置"""
+        if "window_position" not in self.cfg:
+            self.cfg["window_position"] = {}
+        self.cfg["window_position"]["x"] = self.root.winfo_x()
+        self.cfg["window_position"]["y"] = self.root.winfo_y()
+
     def hide(self):
+        self._save_position()
         self.root.withdraw()
         self._visible = False
         if self._settings_win:

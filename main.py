@@ -4,12 +4,11 @@
 import sys
 import os
 
-# 确保项目根目录在 sys.path 中
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_DIR)
 os.chdir(PROJECT_DIR)
 
-from config import load_config
+from config import load_config, save_config
 from hotkey import HotkeyListener
 from dictionary import Dictionary
 from translator import AITranslator
@@ -48,14 +47,13 @@ def main():
             return
         ai.translate(text, callback, error_callback)
 
-    # 构建 UI
+    # 构建 UI（传完整 cfg，UI 需要读 window_position 等）
     ui = SpotlightUI(cfg, on_search=search, on_translate=translate)
 
-    # 热键回调（必须通过 root.after 回到主线程）
+    # 热键回调
     def on_hotkey():
         ui.root.after(0, ui.toggle)
 
-    # 启动热键监听
     hk = HotkeyListener(
         shift=cfg["hotkey"]["shift"],
         ctrl=cfg["hotkey"]["ctrl"],
@@ -69,14 +67,16 @@ def main():
     print(f"[QuickTranslate] Dictionary: {dictionary.word_count} words loaded")
     if ai.is_configured:
         print(f"[QuickTranslate] AI: {cfg['ai']['model']} @ {cfg['ai']['api_base']}")
-    else:
-        print(f"[QuickTranslate] AI: not configured")
 
     try:
         ui.run()
     except KeyboardInterrupt:
         pass
     finally:
+        # 退出前保存窗口位置和配置
+        ui._save_position()
+        cfg["window_position"] = cfg.get("window_position", {})
+        save_config(cfg)
         hk.stop()
         print("[QuickTranslate] Bye!")
 
