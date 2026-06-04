@@ -2,9 +2,11 @@
 import ctypes
 import ctypes.wintypes as wintypes
 import threading
+import time
 
 # Windows constants
 WM_HOTKEY = 0x0312
+WM_QUIT = 0x0012
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
@@ -16,7 +18,7 @@ HOTKEY_ID = 1
 
 
 class HotkeyListener:
-    """全局热键监听器，通过 RegisterHotKey 注册系统级热键"""
+    """全局热键监听器"""
 
     def __init__(self, shift=True, ctrl=True, alt=False, win=False, key="m", callback=None):
         self.modifiers = 0
@@ -33,9 +35,9 @@ class HotkeyListener:
         self.callback = callback
         self._running = False
         self._thread = None
+        self._thread_id = None
 
     def start(self):
-        """注册热键并启动消息循环线程"""
         if self._running:
             return
         self._running = True
@@ -43,30 +45,34 @@ class HotkeyListener:
         self._thread.start()
 
     def stop(self):
-        """停止监听并注销热键"""
         self._running = False
-        # post WM_QUIT to break the message loop
-        user32.PostThreadMessageW(self._thread.ident, 0x0012, 0, 0)  # WM_QUIT
+        if self._thread_id:
+            user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
 
     def _message_loop(self):
-        """在独立线程中运行 Windows 消息循环"""
+        # 必须先确保线程有消息队列
+        # 调用 PeekMessage 会强制创建消息队列
+        msg = wintypes.MSG()
+        user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)
+        time.sleep(0.05)
+
+        # 记录线程 ID 供 stop() 使用
+        self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
+
         if not user32.RegisterHotKey(None, HOTKEY_ID, self.modifiers, self.vk):
-            # Hotkey already registered or failed
             print(f"[Hotkey] Failed to register hotkey (mod={self.modifiers:#x}, vk={self.vk:#x})")
+            print(f"[Hotkey] Shift+Ctrl+M may be occupied by another app")
             self._running = False
             return
 
         print(f"[Hotkey] Registered: Shift+Ctrl+M (id={HOTKEY_ID})")
-        msg = wintypes.MSG()
 
         while self._running:
-            # GetMessage blocks until a message arrives
             ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
             if ret == 0 or ret == -1:
                 break
             if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
                 if self.callback:
-                    # Use tkinter's after() from the callback if needed
                     self.callback()
 
         user32.UnregisterHotKey(None, HOTKEY_ID)

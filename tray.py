@@ -10,17 +10,38 @@ NIM_DELETE = 0x00000002
 NIF_MESSAGE = 0x00000001
 NIF_ICON = 0x00000002
 NIF_TIP = 0x00000004
-NIF_INFO = 0x00000010
 WM_USER = 0x0400
 WM_TRAYICON = WM_USER + 1
 WM_LBUTTONUP = 0x0202
 WM_RBUTTONUP = 0x0205
 IDI_APPLICATION = 32512
-LR_LOADFROMFILE = 0x00000010
-LR_DEFAULTSIZE = 0x00000040
+CS_HREDRAW = 0x0002
+CS_VREDRAW = 0x0001
+WM_DESTROY = 0x0002
+WM_CLOSE = 0x0010
+WM_COMMAND = 0x0111
 
 user32 = ctypes.windll.user32
 shell32 = ctypes.windll.shell32
+kernel32 = ctypes.windll.kernel32
+
+
+# 手动定义 WNDCLASSEX 结构体（ctypes.wintypes 不自带）
+class WNDCLASSEX(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", ctypes.c_uint),
+        ("style", ctypes.c_uint),
+        ("lpfnWndProc", ctypes.c_void_p),
+        ("cbClsExtra", ctypes.c_int),
+        ("cbWndExtra", ctypes.c_int),
+        ("hInstance", wintypes.HANDLE),
+        ("hIcon", wintypes.HANDLE),
+        ("hCursor", wintypes.HANDLE),
+        ("hbrBackground", wintypes.HANDLE),
+        ("lpszMenuName", ctypes.c_wchar_p),
+        ("lpszClassName", ctypes.c_wchar_p),
+        ("hIconSm", wintypes.HANDLE),
+    ]
 
 
 class NOTIFYICONDATA(ctypes.Structure):
@@ -30,7 +51,7 @@ class NOTIFYICONDATA(ctypes.Structure):
         ("uID", ctypes.c_uint),
         ("uFlags", ctypes.c_uint),
         ("uCallbackMessage", ctypes.c_uint),
-        ("hIcon", wintypes.HICON),
+        ("hIcon", wintypes.HWND),
         ("szTip", ctypes.c_wchar * 128),
         ("dwState", ctypes.c_uint),
         ("dwStateMask", ctypes.c_uint),
@@ -39,8 +60,13 @@ class NOTIFYICONDATA(ctypes.Structure):
         ("szInfoTitle", ctypes.c_wchar * 64),
         ("dwInfoFlags", ctypes.c_uint),
         ("guidItem", ctypes.c_byte * 16),
-        ("hBalloonIcon", wintypes.HICON),
+        ("hBalloonIcon", wintypes.HWND),
     ]
+
+
+# 窗口过程回调类型
+WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, ctypes.c_uint,
+                              wintypes.WPARAM, wintypes.LPARAM)
 
 
 class SystemTrayIcon:
@@ -52,9 +78,9 @@ class SystemTrayIcon:
         self.on_exit = on_exit
         self._nid = None
         self._hwnd = None
-        self._menu_hwnd = None
         self._thread = None
         self._running = False
+        self._wndproc_ref = None  # 防止 GC
 
     def start(self):
         if self._running:
@@ -66,71 +92,73 @@ class SystemTrayIcon:
     def stop(self):
         self._running = False
         if self._hwnd:
-            # Remove tray icon
             if self._nid:
                 shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(self._nid))
-            user32.PostMessageW(self._hwnd, 0x0010, 0, 0)  # WM_CLOSE
+            user32.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
 
     def _run(self):
-        """在独立线程中创建隐藏窗口和托盘图标"""
+        class_name = "QuickTranslateTrayClass"
 
-        # Window procedure
-        wndproc = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, ctypes.c_uint,
-                                      wintypes.WPARAM, wintypes.LPARAM)
-
-        def _wnd_proc(hwnd, msg, wparam, lparam):
+        # 窗口过程
+        def wnd_proc(hwnd, msg, wparam, lparam):
             if msg == WM_TRAYICON:
                 if lparam == WM_LBUTTONUP:
-                    # 左键点击 → 切换窗口
                     if self.on_toggle:
                         self.on_toggle()
                 elif lparam == WM_RBUTTONUP:
-                    # 右键点击 → 显示菜单
                     self._show_menu(hwnd)
                 return 0
-            elif msg == 0x0102:  # WM_COMMAND
+            elif msg == WM_COMMAND:
                 cmd = wparam & 0xFFFF
-                if cmd == 1001:  # Show/Hide
+                if cmd == 1001:
                     if self.on_toggle:
                         self.on_toggle()
-                elif cmd == 1002:  # Exit
+                elif cmd == 1002:
                     if self.on_exit:
                         self.on_exit()
                     else:
                         self.stop()
                 return 0
-            elif msg == 0x0002:  # WM_DESTROY
+            elif msg == WM_DESTROY:
                 user32.PostQuitMessage(0)
                 return 0
-            return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+            # 显式转换参数类型，避免 64 位溢出
+            return user32.DefWindowProcW(
+                wintypes.HWND(hwnd),
+                wintypes.UINT(msg),
+                wintypes.WPARAM(wparam),
+                wintypes.LPARAM(lparam))
 
-        self._wndproc = wndproc  # prevent GC
+        self._wndproc_ref = WNDPROC(wnd_proc)
 
-        # Register window class
-        class_name = "QuickTranslateTray"
-
-        wc = wintypes.WNDCLASSEX()
-        wc.cbSize = ctypes.sizeof(wintypes.WNDCLASSEX)
-        wc.lpfnWndProc = self._wndproc
-        wc.hInstance = ctypes.windll.kernel32.GetModuleHandleW(None)
+        # 注册窗口类
+        wc = WNDCLASSEX()
+        wc.cbSize = ctypes.sizeof(WNDCLASSEX)
+        wc.style = CS_HREDRAW | CS_VREDRAW
+        wc.lpfnWndProc = ctypes.cast(self._wndproc_ref, ctypes.c_void_p)
+        wc.hInstance = kernel32.GetModuleHandleW(None)
         wc.lpszClassName = class_name
-        user32.RegisterClassExW(ctypes.byref(wc))
 
-        # Create hidden window
+        atom = user32.RegisterClassExW(ctypes.byref(wc))
+        if not atom:
+            print("[Tray] Failed to register window class")
+            self._running = False
+            return
+
+        # 创建隐藏窗口
         self._hwnd = user32.CreateWindowExW(
             0, class_name, "QuickTranslateTray", 0,
             0, 0, 0, 0, 0, 0, wc.hInstance, None
         )
-
         if not self._hwnd:
-            print("[Tray] Failed to create window")
+            print("[Tray] Failed to create hidden window")
             self._running = False
             return
 
-        # Load default application icon
+        # 加载图标
         hicon = user32.LoadIconW(0, IDI_APPLICATION)
 
-        # Create tray icon
+        # 创建托盘图标
         self._nid = NOTIFYICONDATA()
         self._nid.cbSize = ctypes.sizeof(NOTIFYICONDATA)
         self._nid.hWnd = self._hwnd
@@ -143,7 +171,7 @@ class SystemTrayIcon:
         shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(self._nid))
         print("[Tray] Icon added")
 
-        # Message loop
+        # 消息循环
         msg = wintypes.MSG()
         while self._running:
             ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
@@ -157,33 +185,13 @@ class SystemTrayIcon:
     def _show_menu(self, hwnd):
         """显示右键菜单"""
         menu = user32.CreatePopupMenu()
-
-        # "显示/隐藏 Quick Translate"
-        show_text = "显示/隐藏 Quick Translate"
-        user32.AppendMenuW(menu, 0, 1001, show_text)
-        user32.AppendMenuMenu = menu
-
-        # 分隔线
-        user32.AppendMenuW(menu, 0x00000800, 0, None)  # MF_SEPARATOR
-
-        # "退出"
+        user32.AppendMenuW(menu, 0, 1001, "显示/隐藏 Quick Translate")
+        user32.AppendMenuW(menu, 0x00000800, 0, None)  # 分隔线
         user32.AppendMenuW(menu, 0, 1002, "退出")
 
-        # 获取光标位置
         pt = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(pt))
-
-        # 设置前台窗口（必须，否则菜单不会自动消失）
         user32.SetForegroundWindow(hwnd)
-
-        # 显示菜单
-        user32.TrackPopupMenu(
-            menu, 0x0100,  # TPM_RIGHTBUTTON
-            pt.x, pt.y, 0, hwnd, None
-        )
-
-        # 发送空消息让菜单消失
+        user32.TrackPopupMenu(menu, 0x0100, pt.x, pt.y, 0, hwnd, None)
         user32.PostMessageW(hwnd, 0, 0, 0)
-
-        # 销毁菜单
         user32.DestroyMenu(menu)
