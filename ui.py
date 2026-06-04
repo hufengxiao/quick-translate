@@ -360,11 +360,11 @@ class SpotlightUI:
                 defn = defn[:max_len] + "…"
             self.listbox.insert(tk.END, f"  {word}  {defn}")
 
-        # 选中第一个，直接展示释义（选中即展示）
+        # 选中第一个，直接展示释义（不记录历史，只有用户手动操作才记录）
         self.listbox.selection_set(0)
         self.listbox.activate(0)
         self._selected_idx = 0
-        self._show_definition(0)
+        self._show_definition(0, record_history=False)
 
     def _clear_matches(self):
         self._matches = []
@@ -464,15 +464,14 @@ class SpotlightUI:
 
     # ── 释义显示 ──
 
-    def _show_definition(self, idx: int):
-        """选中即展示完整释义"""
+    def _show_definition(self, idx: int, record_history=True):
+        """选中即展示完整释义（仅用户手动操作时记录历史）"""
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
             word = m["word"]
             defn = m.get("definition", "无释义")
             self._set_definition(word, defn)
-            # 记录到查词历史
-            if self.history:
+            if record_history and self.history:
                 self.history.add(word, defn)
 
     def _set_definition(self, title: str, content: str):
@@ -486,8 +485,14 @@ class SpotlightUI:
     # ── 复制释义 ──
 
     def _on_copy_definition(self, event=None):
+        title = self.def_title.cget("text")
+        # 只在有真实释义时复制，排除占位文字
+        skip_titles = ("输入单词开始查询…", "最近查词", "搜索出错",
+                        "翻译失败", "AI 翻译中…", "未找到本地释义")
+        if title in skip_titles or title.startswith("🤖"):
+            return
         content = self.def_text.get("1.0", tk.END).strip()
-        if content:
+        if content and not content.startswith("输入新的单词"):
             self.root.clipboard_clear()
             self.root.clipboard_append(content)
             self._show_toast("已复制到剪贴板 ✓", 1500)
