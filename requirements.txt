@@ -1,0 +1,7 @@
+# Quick Translate — Phase 1 dependencies
+# Core (no external deps for basic functionality)
+# Python 3.10+ with tkinter
+
+# Optional but recommended:
+loguru>=0.7.0              # Structured logging (falls back to stdlib if missing)
+pyperclip>=1.8.2           # Clipboard monitoring (Phase 2)
