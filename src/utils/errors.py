@@ -1,17 +1,21 @@
 """Unified error hierarchy for Quick Translate."""
 from __future__ import annotations
 
+_SENTINEL = object()
+
 
 class TranslateError(Exception):
     """Base error for all Quick Translate errors."""
     code: str = "UNKNOWN"
     recoverable: bool = True
 
-    def __init__(self, message: str, *, code: str | None = None, recoverable: bool = True):
+    def __init__(self, message: str, *, code: str | None = None,
+                 recoverable: object = _SENTINEL):
         super().__init__(message)
         if code:
             self.code = code
-        self.recoverable = recoverable
+        if recoverable is not _SENTINEL:
+            self.recoverable = bool(recoverable)
 
 
 class DictionaryError(TranslateError):
