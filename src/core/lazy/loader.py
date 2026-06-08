@@ -94,13 +94,16 @@ class LazyDictLoader:
 
     def _background_load(self, raw: dict, remaining_keys: list[str], all_keys: list[str]) -> None:
         t0 = time.perf_counter()
-        # Add remaining entries in chunks
-        chunk_size = 5000
-        for i in range(0, len(remaining_keys), chunk_size):
-            chunk = remaining_keys[i:i + chunk_size]
-            for k in chunk:
-                self._full_data[k] = raw[k]
+        # Build a NEW dict to avoid mutating the one the main thread is iterating
+        full: dict[str, str] = {}
+        # Copy preload entries from the current dict
+        full.update(self._full_data)
+        # Add remaining entries
+        for k in remaining_keys:
+            full[k] = raw[k]
 
+        # Atomic swap — main thread sees the new dict only when fully built
+        self._full_data = full
         self._sorted_keys = all_keys
         self._phase = 2
         elapsed = (time.perf_counter() - t0) * 1000
