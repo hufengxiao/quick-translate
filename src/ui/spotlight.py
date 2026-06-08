@@ -45,7 +45,8 @@ class SpotlightUI:
         self.root.attributes("-alpha", 0.0)  # Start transparent for fade-in animation
         self.root.configure(bg=self.t.bg)
 
-        w, h = Sizes.WINDOW_WIDTH, Sizes.WINDOW_HEIGHT
+        w = self.cfg.ui.width or Sizes.WINDOW_WIDTH
+        h = self.cfg.ui.height or Sizes.WINDOW_HEIGHT
         pos = self.cfg.window_position
         if pos and "x" in pos and "y" in pos:
             x, y = pos["x"], pos["y"]
@@ -524,18 +525,15 @@ class SpotlightUI:
 
     def hide(self):
         self._save_position()
-        if self.cfg.ui.animations_enabled:
-            def do_withdraw():
-                self.root.withdraw()
-                self._visible = False
-            self._animator.fade_out("hide", duration_ms=150, on_complete=do_withdraw)
-        else:
-            self.root.withdraw()
-            self._visible = False
-
+        self._visible = False  # set immediately to prevent rapid-toggle bug
         if self._settings_win:
             self._settings_win.destroy()
             self._settings_win = None
+        if self.cfg.ui.animations_enabled:
+            self._animator.fade_out("hide", duration_ms=150,
+                                    on_complete=self.root.withdraw)
+        else:
+            self.root.withdraw()
 
     def toggle(self):
         if self._visible:

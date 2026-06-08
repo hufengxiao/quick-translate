@@ -9,7 +9,13 @@ from typing import List, Optional
 from .errors import ConfigError
 
 APP_NAME = "QuickTranslate"
-CONFIG_DIR = Path(os.environ.get("APPDATA", os.path.expanduser("~"))) / ".quick-translate"
+_LEGACY_DIR = Path.home() / ".quick-translate"
+_MODERN_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / ".quick-translate"
+# Prefer legacy dir if it exists (migration from old version)
+if _LEGACY_DIR.exists() and not _MODERN_DIR.exists():
+    CONFIG_DIR = _LEGACY_DIR
+else:
+    CONFIG_DIR = _MODERN_DIR
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 

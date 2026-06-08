@@ -16,12 +16,14 @@ class AITranslator:
         self.model = model
         self.system_prompt = system_prompt
         self._busy = False
+        self._lock = threading.Lock()
 
     def translate(self, text: str, callback: Callable[[str], None], error_callback: Optional[Callable[[str], None]] = None):
         """异步翻译文本，结果通过回调返回"""
-        if self._busy:
-            return
-        self._busy = True
+        with self._lock:
+            if self._busy:
+                return
+            self._busy = True
         thread = threading.Thread(
             target=self._do_translate,
             args=(text, callback, error_callback),
@@ -37,7 +39,8 @@ class AITranslator:
             if error_callback:
                 error_callback(str(e))
         finally:
-            self._busy = False
+            with self._lock:
+                self._busy = False
 
     def _call_api(self, text: str) -> str:
         url = f"{self.api_base}/chat/completions"

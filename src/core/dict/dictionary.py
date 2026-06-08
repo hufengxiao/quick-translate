@@ -64,9 +64,18 @@ class Dictionary:
                      len(data), elapsed)
 
     def _build_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
-        """Build all indexes from data."""
-        self._exact.load(data)
-        self._trie.load(data)
+        """Build all indexes from data.
+
+        Creates NEW index objects and atomically swaps references so the main
+        thread never sees a half-built trie.
+        """
+        new_exact = ExactIndex()
+        new_exact.load(data)
+        new_trie = TrieIndex()
+        new_trie.load(data)
+        # Atomic swap — main thread sees complete indexes only
+        self._exact = new_exact
+        self._trie = new_trie
         self._router = QueryRouter(
             exact=self._exact,
             trie=self._trie,

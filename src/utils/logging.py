@@ -25,9 +25,7 @@ class _StdlibShim:
         self._configured = False
 
     def _ensure_handler(self, level="INFO", file_enabled=True, max_size_mb=10):
-        if self._configured:
-            return
-        self._logger.handlers.clear()
+        self._logger.handlers.clear()  # always reset to allow reconfiguration
         # Console
         ch = logging.StreamHandler(sys.stderr)
         ch.setLevel(getattr(logging, level.upper(), logging.INFO))

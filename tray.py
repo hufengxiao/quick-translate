@@ -50,7 +50,7 @@ class NOTIFYICONDATA(ctypes.Structure):
         ("uID", ctypes.c_uint),
         ("uFlags", ctypes.c_uint),
         ("uCallbackMessage", ctypes.c_uint),
-        ("hIcon", wintypes.HWND),
+        ("hIcon", wintypes.HANDLE),
         ("szTip", ctypes.c_wchar * 128),
         ("dwState", ctypes.c_uint),
         ("dwStateMask", ctypes.c_uint),
@@ -59,7 +59,7 @@ class NOTIFYICONDATA(ctypes.Structure):
         ("szInfoTitle", ctypes.c_wchar * 64),
         ("dwInfoFlags", ctypes.c_uint),
         ("guidItem", ctypes.c_byte * 16),
-        ("hBalloonIcon", wintypes.HWND),
+        ("hBalloonIcon", wintypes.HANDLE),
     ]
 
 

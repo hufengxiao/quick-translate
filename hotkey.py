@@ -36,6 +36,7 @@ class HotkeyListener:
         self._running = False
         self._thread = None
         self._thread_id = None
+        self._ready = threading.Event()
 
     def start(self):
         if self._running:
@@ -46,6 +47,7 @@ class HotkeyListener:
 
     def stop(self):
         self._running = False
+        self._ready.wait(timeout=2.0)  # wait for message loop to be ready
         if self._thread_id:
             user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
 
@@ -58,6 +60,7 @@ class HotkeyListener:
 
         # 记录线程 ID 供 stop() 使用
         self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
+        self._ready.set()  # signal that message loop is ready
 
         if not user32.RegisterHotKey(None, HOTKEY_ID, self.modifiers, self.vk):
             print(f"[Hotkey] Failed to register hotkey (mod={self.modifiers:#x}, vk={self.vk:#x})")

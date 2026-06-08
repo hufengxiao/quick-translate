@@ -101,8 +101,15 @@ def main():
     hk.start()
 
     # ── 9. System Tray ──
+    # Build dynamic tooltip from config
+    _mods = []
+    if cfg.hotkey.shift: _mods.append("Shift")
+    if cfg.hotkey.ctrl: _mods.append("Ctrl")
+    if cfg.hotkey.alt: _mods.append("Alt")
+    if cfg.hotkey.win: _mods.append("Win")
+    _mods.append(cfg.hotkey.key.upper())
     tray = SystemTrayIcon(
-        tooltip=f"Quick Translate (Shift+Ctrl+M)",
+        tooltip=f"Quick Translate ({'+'.join(_mods)})",
         on_toggle=lambda: ui.root.after(0, ui.toggle),
         on_exit=lambda: ui.root.after(0, ui.root.destroy),
     )
