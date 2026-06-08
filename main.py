@@ -1,7 +1,6 @@
 """Quick Translate — Apple-grade Windows dictionary tool.
 
-Phase 1 rewrite: modular architecture, indexed dictionary,
-LRU cache, lazy loading, Apple HIG UI, smooth animations.
+Phase 2: clipboard monitor, TTS pronunciation, multi-dict sources.
 """
 import sys
 import os
@@ -15,8 +14,10 @@ os.chdir(PROJECT_DIR)
 from src.utils.config import load_config, save_config
 from src.utils.logging import setup_logging, logger
 from src.core.dict.dictionary import Dictionary
-from src.core.lazy.loader import LazyDictLoader
 from src.ui.spotlight import SpotlightUI
+from src.services.clipboard import ClipboardMonitor
+from src.services.tts import TTSService
+from src.services.dict_sources.sources import LocalDictSource, YoudaoDictSource
 
 # Keep original modules for features not yet migrated
 from hotkey import HotkeyListener
@@ -35,7 +36,7 @@ def main():
         file_enabled=cfg.logging.file_enabled,
         max_size_mb=cfg.logging.max_size_mb,
     )
-    logger.info("Quick Translate v1.1.0 starting...")
+    logger.info("Quick Translate v1.2.0 starting...")
 
     # ── 2. Load dictionary (2-phase: preload → background) ──
     dict_path = cfg.dictionary.dict_path
@@ -62,14 +63,31 @@ def main():
         system_prompt=cfg.ai.system_prompt,
     )
 
-    # ── 4. History ──
+    # ── 4. Multi-dict sources ──
+    local_source = LocalDictSource(dictionary)
+    youdao_source = YoudaoDictSource()
+
+    # ── 5. TTS ──
+    tts = TTSService()
+    if tts.is_available:
+        logger.info("TTS available — pronunciation enabled")
+    else:
+        logger.info("TTS not available (install pywin32 for pronunciation)")
+
+    # ── 6. History ──
     history = SearchHistory(max_size=50)
 
-    # ── 5. Search function ──
+    # ── 7. Search function (local first, youdao fallback) ──
     def search(query: str):
-        return dictionary.search(query, limit=20)
+        results = dictionary.search(query, limit=20)
+        # If no local results and query looks like a single word, try youdao
+        if not results and len(query.split()) == 1 and len(query) < 30:
+            youdao_result = youdao_source.lookup(query)
+            if youdao_result:
+                results = [youdao_result]
+        return results
 
-    # ── 6. Translate function ──
+    # ── 8. Translate function ──
     def translate(text, callback, error_callback):
         if not ai.is_configured:
             error_callback("AI 翻译未配置。请在 ~/.quick-translate/config.json 中设置 api_key")
@@ -79,15 +97,34 @@ def main():
             return
         ai.translate(text, callback, error_callback)
 
-    # ── 7. Build UI ──
+    # ── 9. Pronunciation function ──
+    def pronounce(word: str):
+        if tts.is_available:
+            tts.speak(word)
+
+    # ── 10. Build UI ──
     ui = SpotlightUI(
         cfg,
         on_search=search,
         on_translate=translate,
         history=history,
+        on_pronounce=pronounce,
     )
 
-    # ── 8. Hotkey ──
+    # ── 11. Clipboard monitor ──
+    def on_clipboard_text(text: str):
+        """Called when clipboard has new translatable text."""
+        # Show the window and insert text into search
+        ui.root.after(0, lambda: ui.show_and_search(text))
+
+    clipboard = ClipboardMonitor(
+        on_text=on_clipboard_text,
+        min_length=cfg.clipboard.min_length,
+        auto_translate=cfg.clipboard.monitor_enabled,
+    )
+    clipboard.start()
+
+    # ── 12. Hotkey ──
     def on_hotkey():
         ui.root.after(0, ui.toggle)
 
@@ -100,8 +137,7 @@ def main():
     )
     hk.start()
 
-    # ── 9. System Tray ──
-    # Build dynamic tooltip from config
+    # ── 13. System Tray ──
     _mods = []
     if cfg.hotkey.shift: _mods.append("Shift")
     if cfg.hotkey.ctrl: _mods.append("Ctrl")
@@ -115,15 +151,18 @@ def main():
     )
     tray.start()
 
-    # ── 10. Ready ──
+    # ── 14. Ready ──
     t_ready = time.perf_counter()
     startup_ms = (t_ready - t_start) * 1000
-    logger.info("Ready! Startup: {:.0f}ms | Dictionary: {} words | AI: {} @ {}",
-                startup_ms, dictionary.word_count,
-                cfg.ai.model if ai.is_configured else "not configured",
-                cfg.ai.api_base if ai.is_configured else "N/A")
+    features = ["dict", "ai"]
+    if tts.is_available:
+        features.append("tts")
+    if cfg.clipboard.monitor_enabled:
+        features.append("clipboard")
+    logger.info("Ready! Startup: {:.0f}ms | Features: {} | Dictionary: {} words",
+                startup_ms, "+".join(features), dictionary.word_count)
     print(f"[QuickTranslate] Ready in {startup_ms:.0f}ms! Press Shift+Ctrl+M to open.")
-    print(f"[QuickTranslate] Dictionary: {dictionary.word_count} words loaded")
+    print(f"[QuickTranslate] Features: {', '.join(features)} | {dictionary.word_count} words")
 
     try:
         ui.run()
@@ -132,6 +171,7 @@ def main():
     finally:
         ui._save_position()
         save_config(cfg)
+        clipboard.stop()
         tray.stop()
         hk.stop()
         logger.info("Shutdown complete")

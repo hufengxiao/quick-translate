@@ -16,13 +16,14 @@ class SpotlightUI:
     """Apple Spotlight-inspired translation window."""
 
     def __init__(self, config, on_search: Callable, on_translate: Callable,
-                 history=None):
+                 history=None, on_pronounce: Callable[[str], None] | None = None):
         self.cfg = config
         self.theme = get_theme("dark")
         self.t = self.theme  # shorthand
         self.on_search = on_search
         self.on_translate = on_translate
         self.history = history
+        self.on_pronounce = on_pronounce
         self.opacity = config.ui.opacity
         self._visible = False
         self._selected_idx = -1
@@ -233,6 +234,9 @@ class SpotlightUI:
 
         settings_btn = self._make_icon_btn(top_bar, "⚙", command=self._open_settings)
         settings_btn.pack(side=tk.RIGHT, padx=(0, S.XS))
+
+        self._speak_btn = self._make_icon_btn(top_bar, "🔊", command=self._on_speak)
+        self._speak_btn.pack(side=tk.RIGHT, padx=(0, S.XS))
 
         # ── Search Bar ──
         search_frame = tk.Frame(main, bg=t.entry_bg, height=Sizes.SEARCH_HEIGHT)
@@ -497,6 +501,32 @@ class SpotlightUI:
             self.root.clipboard_clear()
             self.root.clipboard_append(content)
             self._show_toast("已复制到剪贴板 ✓", 1500)
+
+    # ── Pronunciation ──
+
+    def _on_speak(self):
+        """Speak the currently selected word."""
+        if not self.on_pronounce:
+            return
+        word = None
+        if 0 <= self._selected_idx < len(self._matches):
+            word = self._matches[self._selected_idx]["word"]
+        elif self._ai_pending_query:
+            word = self._ai_pending_query
+        elif self.entry.get().strip():
+            word = self.entry.get().strip()
+        if word:
+            self.on_pronounce(word)
+            self._show_toast(f"🔊 {word}", 1000)
+
+    # ── Clipboard auto-search ──
+
+    def show_and_search(self, text: str):
+        """Show window and search for the given text (used by clipboard monitor)."""
+        self.show()
+        self.entry.delete(0, tk.END)
+        self.entry.insert(0, text)
+        self._do_search()
 
     # ── Window Show/Hide with Animation ──
 

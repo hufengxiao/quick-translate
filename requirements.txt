@@ -1,7 +1,13 @@
-# Quick Translate — Phase 1 dependencies
-# Core (no external deps for basic functionality)
-# Python 3.10+ with tkinter
+# Quick Translate dependencies
+# Core: Python 3.10+ with tkinter (no external deps for basic functionality)
 
-# Optional but recommended:
+# Recommended:
 loguru>=0.7.0              # Structured logging (falls back to stdlib if missing)
-pyperclip>=1.8.2           # Clipboard monitoring (Phase 2)
+
+# Optional:
+pywin32>=306               # Windows COM — enables TTS pronunciation (SAPI5)
+pyperclip>=1.8.2           # Clipboard access (fallback if ctypes fails)
+
+# Build:
+# pyinstaller>=6.0.0       # For building single-file EXE
+# upx                      # For EXE compression (optional, download separately)
