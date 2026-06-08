@@ -14,33 +14,24 @@ jobs:
         python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: |
-          pip install loguru pyinstaller
+        run: pip install loguru pyinstaller
+
       - name: Verify imports
-        run: |
-          python -c "import sys; sys.path.insert(0, '.'); from src.utils.config import load_config; print('imports OK')"
+        run: python -c "import sys; sys.path.insert(0, '.'); from src.utils.config import load_config; print('imports OK')"
+
       - name: Run tests
-        run: |
-          python -c "
-          import sys, time; sys.path.insert(0, '.')
-          from src.utils.logging import setup_logging; setup_logging('WARNING', False)
-          from src.utils.config import load_config; cfg = load_config()
-          import os; dp = cfg.dictionary.dict_path
-          if not os.path.isabs(dp): dp = os.path.join('.', dp)
-          from src.core.dict.dictionary import Dictionary
-          d = Dictionary(dp, 10000, 500); d.load(); time.sleep(0.5)
-          assert d.search('hello')[0]['word'] == 'hello'
-          assert len(d.search('xyznone')) == 0
-          print('All tests passed')
-          "
+        run: python ci_test.py
+
       - name: Build EXE
-        run: |
-          pyinstaller quicktranslate.spec --noconfirm
+        run: pyinstaller quicktranslate.spec --noconfirm
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

@@ -72,11 +72,19 @@ class LazyDictLoader:
             logger.info("Dict loaded fully: {} words in {:.1f}ms", total, self._load_time_ms)
             return self._full_data
 
-        # Phase 1: preload first N sorted keys
-        preload_keys = all_keys[:self._preload_count]
+        # Phase 1: preload common words first (pure ASCII lowercase a-z first,
+        # then everything else). This ensures 'hello', 'world', 'the' etc.
+        # are in the preload set even though special-char entries come first
+        # alphabetically (e.g. "'baby face' nelson", "à la carte").
+        import re
+        _is_common = re.compile(r'^[a-z]+$')
+        common = [k for k in all_keys if _is_common.match(k)]
+        common.sort(key=lambda w: (len(w), w))  # short words first = higher frequency
+        rest = [k for k in all_keys if not _is_common.match(k)]
+        preload_keys = (common + rest)[:self._preload_count]
         preload_data = {k: raw[k] for k in preload_keys}
         self._full_data = preload_data
-        self._sorted_keys = preload_keys
+        self._sorted_keys = sorted(preload_data.keys())
         self._phase = 1
         self._load_time_ms = (time.perf_counter() - t0) * 1000
         logger.info("Phase 1 preload: {} words in {:.1f}ms", self._preload_count, self._load_time_ms)
