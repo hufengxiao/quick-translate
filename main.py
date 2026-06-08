@@ -1,6 +1,7 @@
 """Quick Translate — Apple-grade Windows dictionary tool.
 
-Phase 2: clipboard monitor, TTS pronunciation, multi-dict sources.
+Modular architecture: indexed dictionary, LRU cache, lazy loading,
+clipboard monitoring, multi-dict sources, Apple HIG UI.
 """
 import sys
 import os
@@ -16,7 +17,6 @@ from src.utils.logging import setup_logging, logger
 from src.core.dict.dictionary import Dictionary
 from src.ui.spotlight import SpotlightUI
 from src.services.clipboard import ClipboardMonitor
-from src.services.tts import TTSService
 from src.services.dict_sources.sources import LocalDictSource, YoudaoDictSource
 
 # Keep original modules for features not yet migrated
@@ -67,17 +67,10 @@ def main():
     local_source = LocalDictSource(dictionary)
     youdao_source = YoudaoDictSource()
 
-    # ── 5. TTS ──
-    tts = TTSService()
-    if tts.is_available:
-        logger.info("TTS available — pronunciation enabled")
-    else:
-        logger.info("TTS not available (install pywin32 for pronunciation)")
-
-    # ── 6. History ──
+    # ── 5. History ──
     history = SearchHistory(max_size=50)
 
-    # ── 7. Search function (local first, youdao fallback) ──
+    # ── 6. Search function (local first, youdao fallback) ──
     def search(query: str):
         results = dictionary.search(query, limit=20)
         # If no local results and query looks like a single word, try youdao
@@ -87,7 +80,7 @@ def main():
                 results = [youdao_result]
         return results
 
-    # ── 8. Translate function ──
+    # ── 7. Translate function ──
     def translate(text, callback, error_callback):
         if not ai.is_configured:
             error_callback("AI 翻译未配置。请在 ~/.quick-translate/config.json 中设置 api_key")
@@ -97,24 +90,17 @@ def main():
             return
         ai.translate(text, callback, error_callback)
 
-    # ── 9. Pronunciation function ──
-    def pronounce(word: str):
-        if tts.is_available:
-            tts.speak(word)
-
-    # ── 10. Build UI ──
+    # ── 8. Build UI ──
     ui = SpotlightUI(
         cfg,
         on_search=search,
         on_translate=translate,
         history=history,
-        on_pronounce=pronounce,
     )
 
-    # ── 11. Clipboard monitor ──
+    # ── 9. Clipboard monitor ──
     def on_clipboard_text(text: str):
         """Called when clipboard has new translatable text."""
-        # Show the window and insert text into search
         ui.root.after(0, lambda: ui.show_and_search(text))
 
     clipboard = ClipboardMonitor(
@@ -124,7 +110,7 @@ def main():
     )
     clipboard.start()
 
-    # ── 12. Hotkey ──
+    # ── 10. Hotkey ──
     def on_hotkey():
         ui.root.after(0, ui.toggle)
 
@@ -137,7 +123,7 @@ def main():
     )
     hk.start()
 
-    # ── 13. System Tray ──
+    # ── 11. System Tray ──
     _mods = []
     if cfg.hotkey.shift: _mods.append("Shift")
     if cfg.hotkey.ctrl: _mods.append("Ctrl")
@@ -151,12 +137,10 @@ def main():
     )
     tray.start()
 
-    # ── 14. Ready ──
+    # ── 12. Ready ──
     t_ready = time.perf_counter()
     startup_ms = (t_ready - t_start) * 1000
     features = ["dict", "ai"]
-    if tts.is_available:
-        features.append("tts")
     if cfg.clipboard.monitor_enabled:
         features.append("clipboard")
     logger.info("Ready! Startup: {:.0f}ms | Features: {} | Dictionary: {} words",
