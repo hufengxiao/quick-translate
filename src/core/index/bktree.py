@@ -111,6 +111,10 @@ class BKTree:
         for word, defn in entries.items():
             self.insert(word, defn)
             count += 1
+            # Yield GIL periodically so UI thread stays responsive
+            if count % 2000 == 0:
+                import time as _t
+                _t.sleep(0.001)
         logger.debug("BKTree loaded {} entries", count)
         return count
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os
 import time
+import threading
 from typing import List, Dict, Optional, Callable
 
 from ..index.exact import ExactIndex
@@ -16,13 +17,9 @@ from ...utils.logging import logger
 class Dictionary:
     """High-performance dictionary with cascading index strategy.
 
-    Architecture:
-        LazyDictLoader (2-phase load)
-            -> ExactIndex (HashMap O(1))
-            -> TrieIndex (Trie O(m) prefix)
-            -> BKTree (BK-Tree fuzzy O(log n))
-            -> LRUCache (result cache)
-            -> QueryRouter (unified dispatch)
+    Phase 1 (sync, <200ms): ExactIndex + TrieIndex on 10K common words
+    Phase 2 (background): BKTree on 10K words (~2s)
+    Phase 3 (background): rebuild all 3 indexes on full 66K dict
     """
 
     def __init__(self, dict_path: str, preload_count: int = 10000,
@@ -38,13 +35,14 @@ class Dictionary:
         self._load_start = 0.0
 
     def load(self, on_background_complete: Optional[Callable] = None) -> None:
-        """Load dictionary with 2-phase strategy."""
+        """Load dictionary with multi-phase strategy."""
         self._load_start = time.perf_counter()
 
         def on_phase2_done(data: dict, keys: list[str]):
-            self._build_indexes(data, keys)
+            # Rebuild ALL indexes on full dataset in background
+            self._build_all_indexes(data, keys)
             elapsed = (time.perf_counter() - self._load_start) * 1000
-            logger.info("Dictionary fully loaded: {} words in {:.0f}ms", len(data), elapsed)
+            logger.info("Full indexes ready: {} words in {:.0f}ms", len(data), elapsed)
             if on_background_complete:
                 on_background_complete()
 
@@ -54,15 +52,33 @@ class Dictionary:
             logger.error("Dictionary load failed: {}", e)
             data = {}
 
-        self._build_indexes(data, self._loader.sorted_keys)
+        # Phase 1: build only exact + trie (fast, <200ms)
+        self._build_fast_indexes(data, self._loader.sorted_keys)
         self._ready = True
 
         elapsed = (time.perf_counter() - self._load_start) * 1000
-        logger.info("Dictionary ready (preload): {} words in {:.0f}ms",
-                     len(data), elapsed)
+        logger.info("Fast indexes ready: {} words in {:.0f}ms", len(data), elapsed)
 
-    def _build_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
-        """Build all indexes — new objects + atomic swap for thread safety."""
+    def _build_fast_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
+        """Build exact + trie only (fast). BKTree comes later in background."""
+        new_exact = ExactIndex()
+        new_exact.load(data)
+        new_trie = TrieIndex()
+        new_trie.load(data)
+        self._exact = new_exact
+        self._trie = new_trie
+        # Use empty BKTree for now
+        self._router = QueryRouter(
+            exact=self._exact,
+            trie=self._trie,
+            cache=self._cache,
+            bktree=BKTree(),  # empty, no fuzzy yet
+            sorted_keys=sorted_keys,
+            raw_dict=data,
+        )
+
+    def _build_all_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
+        """Build all indexes including BKTree. Called from background thread."""
         new_exact = ExactIndex()
         new_exact.load(data)
         new_trie = TrieIndex()

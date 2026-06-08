@@ -89,8 +89,9 @@ class LazyDictLoader:
         self._load_time_ms = (time.perf_counter() - t0) * 1000
         logger.info("Phase 1 preload: {} words in {:.1f}ms", self._preload_count, self._load_time_ms)
 
-        # Phase 2: background load remaining
-        remaining_keys = all_keys[self._preload_count:]
+        # Phase 2: background load remaining (all keys NOT in preload)
+        preload_set = set(preload_keys)
+        remaining_keys = [k for k in all_keys if k not in preload_set]
         thread = threading.Thread(
             target=self._background_load,
             args=(raw, remaining_keys, all_keys),
