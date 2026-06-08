@@ -1,9 +1,10 @@
-"""Text-to-Speech service — Windows SAPI5 for offline pronunciation.
+"""Text-to-Speech service — Windows pronunciation via multiple backends.
 
-Uses win32com (if available). COM objects must be used on the thread
-that created them, so we use a dedicated single-thread worker.
+Priority: PowerShell System.Speech > subprocess SAPI > disabled.
+No pywin32 dependency needed.
 """
 from __future__ import annotations
+import subprocess
 import threading
 from typing import Optional
 
@@ -11,115 +12,90 @@ from ..utils.logging import logger
 
 
 class TTSService:
-    """Windows SAPI5 TTS for word pronunciation.
+    """Windows TTS for word pronunciation.
 
-    Uses a dedicated COM thread: all SAPI calls are dispatched to it
-    via a queue, avoiding cross-thread COM errors.
+    Uses PowerShell System.Speech (reliable, no COM registration issues).
+    Falls back to subprocess if needed.
     """
 
     def __init__(self, rate: int = 0, volume: int = 100) -> None:
         self._rate = rate
         self._volume = volume
-        self._sapi = None
         self._available = False
-        self._queue: list[tuple[str, int]] = []  # (text, flags)
-        self._event = threading.Event()
-        self._running = False
-        self._init_sapi()
+        self._backend = "none"
+        self._check_availability()
 
-    def _init_sapi(self) -> None:
-        """Check if win32com is available, then start worker thread."""
+    def _check_availability(self) -> None:
+        """Test if TTS works on this system."""
+        # Try PowerShell System.Speech
         try:
-            import win32com.client  # noqa: F401
-            self._available = True
-        except ImportError:
-            logger.info("TTS not available (install pywin32 for pronunciation)")
-            return
-
-        # Start dedicated COM thread
-        self._running = True
-        self._thread = threading.Thread(target=self._com_worker, daemon=True)
-        self._thread.start()
-
-    def _com_worker(self) -> None:
-        """Dedicated thread that owns the COM object and processes speak requests."""
-        try:
-            import pythoncom
-            pythoncom.CoInitialize()
-        except ImportError:
-            pass
-        except Exception:
-            pass
-
-        try:
-            import win32com.client
-            self._sapi = win32com.client.Dispatch("SAPI.SpVoice")
-            self._sapi.Rate = self._rate
-            self._sapi.Volume = self._volume
-            logger.info("TTS initialized via win32com (SAPI5)")
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Dispose(); Write-Host OK"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            if "OK" in result.stdout:
+                self._available = True
+                self._backend = "powershell"
+                logger.info("TTS available via PowerShell System.Speech")
+                return
         except Exception as e:
-            logger.error("TTS COM init failed: {}", e)
-            self._available = False
-            return
+            logger.debug("PowerShell TTS check failed: {}", e)
 
-        # Process loop: wait for speak requests
-        while self._running:
-            self._event.wait()
-            self._event.clear()
-            while self._queue:
-                text, flags = self._queue.pop(0)
-                try:
-                    self._sapi.Speak(text, flags)
-                except Exception as e:
-                    logger.error("TTS speak error: {}", e)
-
-        # Cleanup
-        try:
-            import pythoncom
-            pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        logger.info("TTS not available on this system")
+        self._available = False
 
     @property
     def is_available(self) -> bool:
         return self._available
 
     def speak(self, text: str, lang: str = "en") -> None:
-        """Speak text asynchronously (non-blocking, queued to COM thread)."""
+        """Speak text asynchronously (non-blocking)."""
         if not self._available:
             return
-        self._queue.append((text, 1))  # SVSFlagsAsync = 1
-        self._event.set()
+        thread = threading.Thread(target=self._do_speak, args=(text,), daemon=True)
+        thread.start()
 
-    def speak_sync(self, text: str) -> None:
-        """Speak text, block until done (still on COM thread)."""
-        if not self._available:
-            return
-        done = threading.Event()
-        self._queue.append((text, 0))  # SVSFDefault = 0 (sync)
-        self._event.set()
-        # We can't truly wait for COM thread without deadlock risk,
-        # so just fire-and-forget for now
+    def _do_speak(self, text: str) -> None:
+        """Speak using PowerShell System.Speech."""
+        try:
+            # Escape single quotes in text
+            safe_text = text.replace("'", "''")
+            script = (
+                "Add-Type -AssemblyName System.Speech; "
+                "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                f"$s.Rate = {self._rate}; "
+                f"$s.Volume = {self._volume}; "
+                f"$s.Speak('{safe_text}'); "
+                "$s.Dispose()"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", script],
+                capture_output=True, timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("TTS speak timed out")
+        except Exception as e:
+            logger.error("TTS speak error: {}", e)
 
     def get_voices(self) -> list[str]:
-        """List available SAPI voices."""
-        if not self._available or not self._sapi:
+        """List available voices."""
+        if not self._available:
             return []
         try:
-            voices = self._sapi.GetVoices()
-            return [voices.Item(i).GetDescription() for i in range(voices.Count)]
+            script = (
+                "Add-Type -AssemblyName System.Speech; "
+                "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                "$s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }; "
+                "$s.Dispose()"
+            )
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", script],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            return [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
         except Exception:
             return []
-
-    def set_voice(self, index: int = 0) -> bool:
-        """Set voice by index."""
-        if not self._available or not self._sapi:
-            return False
-        try:
-            voices = self._sapi.GetVoices()
-            if 0 <= index < voices.Count:
-                self._sapi.Voice = voices.Item(index)
-                return True
-        except Exception:
-            pass
-        return False
