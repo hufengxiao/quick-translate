@@ -100,7 +100,37 @@ LIGHT = Theme(
     toast_fg="#F5F5F7",
 )
 
-THEMES: dict[str, Theme] = {"dark": DARK, "light": LIGHT}
+
+# -- High Contrast Theme (accessibility) --
+HIGH_CONTRAST = Theme(
+    name="high_contrast",
+    bg="#000000",
+    surface="#1A1A1A",
+    surface2="#333333",
+    fg="#FFFFFF",
+    fg_secondary="#CCCCCC",
+    fg_tertiary="#999999",
+    accent="#FFD700",
+    accent_hover="#FFF080",
+    accent_pressed="#FFC000",
+    success="#00FF00",
+    warning="#FFFF00",
+    error="#FF0000",
+    separator="#666666",
+    entry_bg="#1A1A1A",
+    entry_fg="#FFFFFF",
+    entry_placeholder="#999999",
+    list_bg="#000000",
+    list_hover="#333333",
+    list_selected_bg="#FFD700",
+    list_selected_fg="#000000",
+    scrollbar_bg="#000000",
+    scrollbar_fg="#666666",
+    toast_bg="#333333",
+    toast_fg="#FFFFFF",
+)
+
+THEMES: dict[str, Theme] = {"dark": DARK, "light": LIGHT, "high_contrast": HIGH_CONTRAST}
 
 
 def get_theme(name: str = "dark") -> Theme:

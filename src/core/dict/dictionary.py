@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, Callable
 
 from ..index.exact import ExactIndex
 from ..index.trie import TrieIndex
+from ..index.bktree import BKTree
 from ..index.router import QueryRouter
 from ..cache.lru import LRUCache
 from ..lazy.loader import LazyDictLoader
@@ -14,13 +15,14 @@ from ...utils.logging import logger
 
 class Dictionary:
     """High-performance dictionary with cascading index strategy.
-    
+
     Architecture:
         LazyDictLoader (2-phase load)
-            → ExactIndex (HashMap O(1))
-            → TrieIndex (Trie O(m) prefix)
-            → LRUCache (result cache)
-            → QueryRouter (unified dispatch)
+            -> ExactIndex (HashMap O(1))
+            -> TrieIndex (Trie O(m) prefix)
+            -> BKTree (BK-Tree fuzzy O(log n))
+            -> LRUCache (result cache)
+            -> QueryRouter (unified dispatch)
     """
 
     def __init__(self, dict_path: str, preload_count: int = 10000,
@@ -28,6 +30,7 @@ class Dictionary:
         self._dict_path = dict_path
         self._exact = ExactIndex()
         self._trie = TrieIndex()
+        self._bktree = BKTree()
         self._cache = LRUCache(max_size=cache_size)
         self._loader = LazyDictLoader(dict_path, preload_count)
         self._router: Optional[QueryRouter] = None
@@ -35,11 +38,7 @@ class Dictionary:
         self._load_start = 0.0
 
     def load(self, on_background_complete: Optional[Callable] = None) -> None:
-        """Load dictionary with 2-phase strategy.
-        
-        Phase 1 (sync): Load top-N words → index them → ready to search
-        Phase 2 (async): Load remaining words in background
-        """
+        """Load dictionary with 2-phase strategy."""
         self._load_start = time.perf_counter()
 
         def on_phase2_done(data: dict, keys: list[str]):
@@ -55,7 +54,6 @@ class Dictionary:
             logger.error("Dictionary load failed: {}", e)
             data = {}
 
-        # Build indexes for preload data
         self._build_indexes(data, self._loader.sorted_keys)
         self._ready = True
 
@@ -64,22 +62,22 @@ class Dictionary:
                      len(data), elapsed)
 
     def _build_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
-        """Build all indexes from data.
-
-        Creates NEW index objects and atomically swaps references so the main
-        thread never sees a half-built trie.
-        """
+        """Build all indexes — new objects + atomic swap for thread safety."""
         new_exact = ExactIndex()
         new_exact.load(data)
         new_trie = TrieIndex()
         new_trie.load(data)
-        # Atomic swap — main thread sees complete indexes only
+        new_bktree = BKTree()
+        new_bktree.load(data)
+        # Atomic swap
         self._exact = new_exact
         self._trie = new_trie
+        self._bktree = new_bktree
         self._router = QueryRouter(
             exact=self._exact,
             trie=self._trie,
             cache=self._cache,
+            bktree=self._bktree,
             sorted_keys=sorted_keys,
             raw_dict=data,
         )
