@@ -9,7 +9,6 @@
 - **本地词典** 66,818 词条牛津高阶英汉双解（第10版）
 - **AI 翻译** 本地无结果时自动提示，Enter 一键翻译
 - **有道词典** 本地无结果时自动查询有道词典 API
-- **单词发音** 🔊 按按钮发音（Windows SAPI5，需 pywin32）
 - **剪贴板监听** 复制英文自动弹出窗口查询（可关闭）
 - **查词历史** 自动记录最近 50 条查询，唤出即显示
 - **系统托盘** 最小化到托盘，右键菜单管理
@@ -26,8 +25,6 @@
 # 基础运行（无需额外依赖）
 python main.py
 
-# 安装可选依赖（发音 + 结构化日志）
-pip install pywin32 loguru
 
 # 或双击 start.bat
 ```
@@ -93,7 +90,6 @@ quick-translate/
 │   │   └── layout.py             # 8px 网格
 │   ├── services/
 │   │   ├── clipboard.py          # 剪贴板监听
-│   │   ├── tts.py                # SAPI5 发音
 │   │   └── dict_sources/sources.py # 多词典源
 │   └── utils/
 │       ├── config.py             # 配置管理
@@ -110,7 +106,6 @@ quick-translate/
 
 - Windows 10/11
 - Python 3.10+（含 tkinter）
-- pywin32（可选，用于发音）
 - loguru（可选，自动回退到 stdlib logging）
 
 ## 📦 打包为 EXE
