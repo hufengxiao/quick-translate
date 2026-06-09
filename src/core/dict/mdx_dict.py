@@ -139,9 +139,10 @@ class MDXDictionary:
             phon = html_mod.unescape(m.group(1))
 
         pos = ""
-        m = re.search(r'<span class="pos">(.*?)</span>', html_content)
+        m = re.search(r'<span\s+class="pos"[^>]*>(.*?)</span>', html_content, re.DOTALL)
         if m:
             pos = html_mod.unescape(re.sub(r"<[^>]+>", "", m.group(1)).strip())
+            pos = re.sub(r"[,\s]+$", "", pos).strip()  # clean trailing commas
 
         defn = ""
         m = re.search(r"<defT><chn>(.*?)</chn></defT>", html_content)
