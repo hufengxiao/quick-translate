@@ -1,9 +1,12 @@
-"""主窗口 UI - Spotlight 风格查词工具"""
+"""主窗口 UI - Apple Spotlight 风格（使用设计系统）"""
 import tkinter as tk
 from tkinter import font as tkfont
 import ctypes
 import traceback
 from typing import Optional, Callable, List, Dict
+
+from styles import StyleManager
+from animations import AnimationEngine
 
 
 class SpotlightUI:
@@ -14,20 +17,25 @@ class SpotlightUI:
                  on_translate: Callable[[str, Callable, Optional[Callable]], None],
                  history=None):
         self.cfg = config
-        self.ui_cfg = config["ui"]
         self.on_search = on_search
         self.on_translate = on_translate
         self.history = history
-        self.opacity = self.ui_cfg["opacity"]
+
+        # 设计系统
+        self.sm = StyleManager('dark')
+        self.p = self.sm.palette
+
+        self.opacity = config["ui"]["opacity"]
         self._visible = False
         self._selected_idx = -1
         self._matches: List[Dict[str, str]] = []
         self._settings_win = None
         self._toast_after = None
-        self._ai_pending_query = None  # 待 AI 翻译的查询
+        self._ai_pending_query = None
 
         self._build_window()
         self._build_widgets()
+        self.anim = AnimationEngine(self.root)
 
     def _build_window(self):
         self.root = tk.Tk()
@@ -35,10 +43,10 @@ class SpotlightUI:
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", self.opacity)
-        self.root.configure(bg=self.ui_cfg["bg_color"])
+        self.root.configure(bg=self.p.bg_primary)
 
-        w, h = self.ui_cfg["width"], self.ui_cfg["height"]
-        # 恢复上次窗口位置
+        w = self.cfg["ui"]["width"]
+        h = self.cfg["ui"]["height"]
         pos = self.cfg.get("window_position")
         if pos and "x" in pos and "y" in pos:
             x, y = pos["x"], pos["y"]
@@ -49,7 +57,16 @@ class SpotlightUI:
             y = (sh - h) // 3
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
-        # Windows 11 圆角
+        # DPI 感知
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+        # 圆角
         try:
             hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
             pref = ctypes.c_int(2)
@@ -61,7 +78,6 @@ class SpotlightUI:
         self.root.bind("<Escape>", lambda e: self.hide())
         self.root.bind("<FocusIn>", self._on_focus_in)
         self.root.bind("<FocusOut>", self._on_focus_out)
-
         self._drag_x = 0
         self._drag_y = 0
 
@@ -94,22 +110,21 @@ class SpotlightUI:
     # ── 按钮 ──
 
     def _make_icon_btn(self, parent, text, command=None):
-        cfg = self.ui_cfg
-        bg = cfg["bg_color"]
-        btn = tk.Label(parent, text=text, bg=bg, fg="#585b70",
+        bg = self.p.bg_primary
+        btn = tk.Label(parent, text=text, bg=bg, fg=self.p.text_tertiary,
                        font=("Segoe UI", 11), cursor="hand2", padx=4, pady=2)
 
         def on_enter(e):
-            btn.config(fg="#cdd6f4", bg="#313244")
+            btn.config(fg=self.p.text_primary, bg=self.p.bg_tertiary)
 
         def on_leave(e):
-            btn.config(fg="#585b70", bg=bg)
+            btn.config(fg=self.p.text_tertiary, bg=bg)
 
         def on_press(e):
-            btn.config(fg="#89b4fa", bg="#45475a")
+            btn.config(fg=self.p.accent_primary, bg=self.p.bg_elevated)
 
         def on_release(e):
-            btn.config(fg="#cdd6f4", bg="#313244")
+            btn.config(fg=self.p.text_primary, bg=self.p.bg_tertiary)
             if command:
                 command()
 
@@ -127,12 +142,11 @@ class SpotlightUI:
             self._settings_win = None
             return
 
-        cfg = self.ui_cfg
         win = tk.Toplevel(self.root)
         win.overrideredirect(True)
         win.attributes("-topmost", True)
         win.attributes("-alpha", self.opacity)
-        win.configure(bg=cfg["entry_bg"])
+        win.configure(bg=self.p.bg_tertiary)
         self._settings_win = win
 
         rx = self.root.winfo_x()
@@ -149,7 +163,7 @@ class SpotlightUI:
             pass
 
         tk.Label(win, text="透明度", font=("Segoe UI", 9),
-                 bg=cfg["entry_bg"], fg="#cdd6f4").pack(pady=(8, 0))
+                 bg=self.p.bg_tertiary, fg=self.p.text_primary).pack(pady=(8, 0))
 
         var = tk.DoubleVar(value=self.opacity)
 
@@ -160,8 +174,8 @@ class SpotlightUI:
         tk.Scale(
             win, from_=0.1, to=0.9, resolution=0.1,
             orient=tk.HORIZONTAL, variable=var, command=on_slider,
-            bg=cfg["entry_bg"], fg="#cdd6f4",
-            highlightthickness=0, troughcolor=cfg["bg_color"],
+            bg=self.p.bg_tertiary, fg=self.p.text_primary,
+            highlightthickness=0, troughcolor=self.p.bg_primary,
             sliderrelief=tk.FLAT, length=190, showvalue=True,
             bd=0, font=("Segoe UI", 8),
         ).pack(padx=10, pady=(0, 6))
@@ -178,10 +192,9 @@ class SpotlightUI:
         self.opacity = value
         self.root.attributes("-alpha", self.opacity)
 
-    # ── Toast 提示 ──
+    # ── Toast ──
 
     def _show_toast(self, text, duration=2000):
-        """在窗口底部显示一个轻量 toast 提示"""
         if self._toast_after:
             self.root.after_cancel(self._toast_after)
             if hasattr(self, '_toast_label') and self._toast_label:
@@ -189,7 +202,7 @@ class SpotlightUI:
 
         self._toast_label = tk.Label(
             self.root, text=text, font=("Segoe UI", 9),
-            bg="#45475a", fg="#cdd6f4", padx=10, pady=4,
+            bg=self.p.bg_elevated, fg=self.p.text_primary, padx=10, pady=4,
         )
         self._toast_label.place(relx=0.5, rely=0.95, anchor="s")
         self._toast_after = self.root.after(
@@ -198,19 +211,15 @@ class SpotlightUI:
     # ── 构建 UI ──
 
     def _build_widgets(self):
-        cfg = self.ui_cfg
-        fs = cfg["font_size"]
-        default_font = tkfont.Font(family="Segoe UI", size=fs)
-        small_font = tkfont.Font(family="Segoe UI", size=fs - 1)
-        bold_font = tkfont.Font(family="Segoe UI", size=fs, weight="bold")
-        mono_font = tkfont.Font(family="Consolas", size=10)
+        s = self.sm
+        p = self.p
 
-        main = tk.Frame(self.root, bg=cfg["bg_color"])
+        main = tk.Frame(self.root, bg=p.bg_primary)
         main.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self._bind_drag(main)
 
         # ── 顶部栏 ──
-        top_bar = tk.Frame(main, bg=cfg["bg_color"], height=30)
+        top_bar = tk.Frame(main, bg=p.bg_primary, height=30)
         top_bar.pack(fill=tk.X, padx=6, pady=(6, 0))
         top_bar.pack_propagate(False)
         self._bind_drag(top_bar)
@@ -221,37 +230,36 @@ class SpotlightUI:
         settings_btn = self._make_icon_btn(top_bar, "⚙", command=self._open_settings)
         settings_btn.pack(side=tk.RIGHT, padx=(0, 2))
 
-        handle = tk.Label(top_bar, text="⠿", bg=cfg["bg_color"], fg="#585b70",
+        handle = tk.Label(top_bar, text="⠿", bg=p.bg_primary, fg=p.text_tertiary,
                           font=("Segoe UI", 13), cursor="fleur")
         handle.place(relx=0.5, rely=0.5, anchor="center")
         self._bind_drag(handle)
 
         # ── 搜索栏 ──
-        search_frame = tk.Frame(main, bg=cfg["entry_bg"], height=42)
+        search_frame = tk.Frame(main, bg=p.bg_tertiary, height=48)
         search_frame.pack(fill=tk.X, padx=10, pady=(4, 4))
         search_frame.pack_propagate(False)
         self._bind_drag(search_frame)
 
-        icon_label = tk.Label(search_frame, text="🔍", bg=cfg["entry_bg"],
-                              fg=cfg["fg_color"], font=("Segoe UI Emoji", 12))
+        icon_label = tk.Label(search_frame, text="🔍", bg=p.bg_tertiary,
+                              fg=p.text_primary, font=("Segoe UI Emoji", 12))
         icon_label.pack(side=tk.LEFT, padx=(8, 4))
         self._bind_drag(icon_label)
 
         self.entry = tk.Entry(
-            search_frame, font=default_font,
-            bg=cfg["entry_bg"], fg=cfg["fg_color"],
-            insertbackground=cfg["accent_color"],
+            search_frame, font=s.get_font('search_input'),
+            bg=p.bg_tertiary, fg=p.text_primary,
+            insertbackground=p.accent_primary,
             relief=tk.FLAT, highlightthickness=0,
         )
-        self.entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4), pady=8)
+        self.entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4), pady=10)
 
-        # 清空按钮（初始隐藏）
         self._clear_btn = tk.Label(
-            search_frame, text="✕", bg=cfg["entry_bg"], fg="#585b70",
+            search_frame, text="✕", bg=p.bg_tertiary, fg=p.text_tertiary,
             font=("Segoe UI", 9), cursor="hand2", padx=6)
         self._clear_btn.bind("<Button-1>", lambda e: self._clear_input())
-        self._clear_btn.bind("<Enter>", lambda e: self._clear_btn.config(fg="#cdd6f4"))
-        self._clear_btn.bind("<Leave>", lambda e: self._clear_btn.config(fg="#585b70"))
+        self._clear_btn.bind("<Enter>", lambda e: self._clear_btn.config(fg=p.text_primary))
+        self._clear_btn.bind("<Leave>", lambda e: self._clear_btn.config(fg=p.text_tertiary))
 
         self.entry.bind("<Key>", self._on_key)
         self.entry.bind("<Down>", self._on_arrow_down)
@@ -259,15 +267,15 @@ class SpotlightUI:
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<Tab>", self._on_tab)
 
-        # ── 候选列表（占据大部分空间）──
-        list_frame = tk.Frame(main, bg=cfg["list_bg"])
+        # ── 候选列表 ──
+        list_frame = tk.Frame(main, bg=p.bg_secondary)
         list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
 
         self.listbox = tk.Listbox(
-            list_frame, font=mono_font,
-            bg=cfg["list_bg"], fg=cfg["fg_color"],
-            selectbackground=cfg["highlight_bg"],
-            selectforeground=cfg["accent_color"],
+            list_frame, font=("Consolas", 10),
+            bg=p.bg_secondary, fg=p.text_primary,
+            selectbackground=p.bg_elevated,
+            selectforeground=p.accent_primary,
             relief=tk.FLAT, highlightthickness=0,
             activestyle="none",
         )
@@ -278,25 +286,25 @@ class SpotlightUI:
         self.listbox.bind("<Double-Button-1>", self._on_double_click)
 
         # ── 释义面板 ──
-        def_frame = tk.Frame(main, bg=cfg["bg_color"])
+        def_frame = tk.Frame(main, bg=p.bg_primary)
         def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
         self._bind_drag(def_frame)
 
         self.def_title = tk.Label(
-            def_frame, text="输入单词开始查询…", font=bold_font,
-            bg=cfg["bg_color"], fg=cfg["accent_color"], anchor="w",
+            def_frame, text="输入单词开始查询…",
+            font=s.get_font('result_title', 'bold'),
+            bg=p.bg_primary, fg=p.accent_primary, anchor="w",
         )
         self.def_title.pack(fill=tk.X, pady=(0, 2))
         self._bind_drag(self.def_title)
 
         self.def_text = tk.Text(
-            def_frame, font=small_font,
-            bg=cfg["bg_color"], fg=cfg["fg_color"],
+            def_frame, font=s.get_font('result_body'),
+            bg=p.bg_primary, fg=p.text_primary,
             relief=tk.FLAT, highlightthickness=0,
             wrap=tk.WORD, state=tk.DISABLED, cursor="arrow",
         )
         self.def_text.pack(fill=tk.BOTH, expand=True)
-        # 点击释义区域复制到剪贴板
         self.def_text.bind("<Button-1>", self._on_copy_definition)
 
         # 首次启动 toast
@@ -322,8 +330,6 @@ class SpotlightUI:
 
     def _do_search(self):
         query = self.entry.get().strip()
-
-        # 控制清空按钮显隐
         if query:
             self._clear_btn.pack(side=tk.RIGHT, padx=(0, 6))
         else:
@@ -332,7 +338,6 @@ class SpotlightUI:
         if not query:
             self._clear_matches()
             return
-
         try:
             self._matches = self.on_search(query)
             self._update_listbox(query)
@@ -346,7 +351,6 @@ class SpotlightUI:
         self._ai_pending_query = None
 
         if not self._matches:
-            # 无本地匹配 — 提示 AI 翻译
             self.listbox.insert(tk.END, f"  🤖 本地无结果，按 Enter AI 翻译")
             self._ai_pending_query = query
             self._set_definition("未找到本地释义", f"按 Enter 使用 AI 翻译 \"{query}\"")
@@ -355,12 +359,10 @@ class SpotlightUI:
         for m in self._matches:
             word = m["word"]
             defn = m.get("definition", "").split("\n")[0]
-            max_len = 22
-            if len(defn) > max_len:
-                defn = defn[:max_len] + "…"
+            if len(defn) > 22:
+                defn = defn[:22] + "…"
             self.listbox.insert(tk.END, f"  {word}  {defn}")
 
-        # 选中第一个，直接展示释义（不记录历史，只有用户手动操作才记录）
         self.listbox.selection_set(0)
         self.listbox.activate(0)
         self._selected_idx = 0
@@ -370,7 +372,6 @@ class SpotlightUI:
         self._matches = []
         self._ai_pending_query = None
         self.listbox.delete(0, tk.END)
-        # 显示最近查词历史
         if self.history:
             recent = self.history.get_recent(8)
             if recent:
@@ -406,18 +407,15 @@ class SpotlightUI:
         return "break"
 
     def _on_enter(self, event):
-        # 有 AI 待翻译的查询 → 触发 AI
         if self._ai_pending_query:
             self._trigger_ai(self._ai_pending_query)
             return "break"
-        # 有选中词条 → 触发 AI 翻译该词条
         if 0 <= self._selected_idx < len(self._matches):
             word = self._matches[self._selected_idx]["word"]
             self._trigger_ai(word)
         return "break"
 
     def _on_tab(self, event):
-        # Tab 也触发 AI（兼容旧习惯）
         query = self.entry.get().strip()
         if query:
             self._trigger_ai(query)
@@ -440,11 +438,9 @@ class SpotlightUI:
         if not sel:
             return
         idx = sel[0]
-        # 普通搜索结果
         if self._matches and idx < len(self._matches):
             self._selected_idx = idx
             self._show_definition(idx)
-        # 历史记录点击 → 搜索该词
         elif self.history:
             recent = self.history.get_recent(8)
             if idx < len(recent):
@@ -465,7 +461,6 @@ class SpotlightUI:
     # ── 释义显示 ──
 
     def _show_definition(self, idx: int, record_history=True):
-        """选中即展示完整释义（仅用户手动操作时记录历史）"""
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
             word = m["word"]
@@ -486,7 +481,6 @@ class SpotlightUI:
 
     def _on_copy_definition(self, event=None):
         title = self.def_title.cget("text")
-        # 只在有真实释义时复制，排除占位文字
         skip_titles = ("输入单词开始查询…", "最近查词", "搜索出错",
                         "翻译失败", "AI 翻译中…", "未找到本地释义")
         if title in skip_titles or title.startswith("🤖"):
@@ -506,12 +500,13 @@ class SpotlightUI:
         self.entry.focus_set()
         self.entry.select_range(0, tk.END)
         self._visible = True
-        # 唤出时如果搜索框为空，显示历史
+        # 淡入动画
+        self.anim.fade_in(self.root, duration=150,
+                          from_alpha=0.3, to_alpha=self.opacity)
         if not self.entry.get().strip():
             self._clear_matches()
 
     def _save_position(self):
-        """保存当前窗口位置"""
         if "window_position" not in self.cfg:
             self.cfg["window_position"] = {}
         self.cfg["window_position"]["x"] = self.root.winfo_x()
@@ -519,8 +514,14 @@ class SpotlightUI:
 
     def hide(self):
         self._save_position()
-        self.root.withdraw()
-        self._visible = False
+        # 淡出动画
+        def do_hide():
+            self.root.withdraw()
+            self.root.attributes("-alpha", self.opacity)
+            self._visible = False
+        self.anim.fade_out(self.root, duration=100,
+                           from_alpha=self.opacity, to_alpha=0.0,
+                           on_complete=do_hide)
         if self._settings_win:
             self._settings_win.destroy()
             self._settings_win = None

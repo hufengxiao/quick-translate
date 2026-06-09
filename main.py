@@ -1,165 +1,190 @@
-"""Quick Translate — Apple-grade Windows dictionary tool.
-
-Modular architecture: indexed dictionary, LRU cache, lazy loading,
-clipboard monitoring, multi-dict sources, Apple HIG UI.
+"""
+Quick Translate - 轻量级查词翻译工具
+全局快捷键 Shift+Ctrl+M 唤出，Spotlight 风格
 """
 import sys
 import os
+import ctypes
+import logging
 import time
+from pathlib import Path
 
-# Ensure project root is on path
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 仅支持 Windows
+if sys.platform != 'win32':
+    print("此程序仅支持 Windows 系统")
+    sys.exit(1)
+
+# DPI 感知（必须在 import tkinter 前）
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+PROJECT_DIR = str(Path(__file__).parent.absolute())
 sys.path.insert(0, PROJECT_DIR)
 os.chdir(PROJECT_DIR)
 
-from src.utils.config import load_config, save_config
-from src.utils.logging import setup_logging, logger
-from src.core.dict.dictionary import Dictionary
-from src.ui.spotlight import SpotlightUI
-from src.services.clipboard import ClipboardMonitor
-from src.services.dict_sources.sources import LocalDictSource, YoudaoDictSource
 
-# Keep original modules for features not yet migrated
-from hotkey import HotkeyListener
-from translator import AITranslator
-from history import SearchHistory
-from tray import SystemTrayIcon
+# ── 单实例检测 ──
 
+class SingleInstance:
+    """使用 Windows Mutex 确保唯一运行实例"""
+
+    def __init__(self, app_id='QuickTranslateMutex'):
+        self._mutex = None
+        self._app_id = app_id
+
+    def check(self) -> bool:
+        """返回 True 表示已有实例在运行"""
+        try:
+            self._mutex = ctypes.windll.kernel32.CreateMutexW(None, False, self._app_id)
+            return ctypes.windll.kernel32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+        except Exception:
+            return False
+
+    def release(self):
+        if self._mutex:
+            try:
+                ctypes.windll.kernel32.ReleaseMutex(self._mutex)
+                ctypes.windll.kernel32.CloseHandle(self._mutex)
+            except Exception:
+                pass
+            self._mutex = None
+
+
+# ── 日志配置 ──
+
+def setup_logging():
+    log_dir = os.path.join(os.path.expanduser("~"), ".quick-translate", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    logger = logging.getLogger('QuickTranslate')
+    logger.setLevel(logging.DEBUG)
+
+    if logger.handlers:
+        return logger
+
+    # 文件日志
+    log_file = os.path.join(log_dir, f'{time.strftime("%Y%m%d")}.log')
+    fh = logging.FileHandler(log_file, encoding='utf-8', mode='a')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
+    logger.addHandler(fh)
+
+    # 控制台日志
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.WARNING)
+    ch.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    logger.addHandler(ch)
+
+    return logger
+
+
+# ── 主应用 ──
 
 def main():
-    t_start = time.perf_counter()
+    # 单实例检测
+    instance = SingleInstance()
+    if instance.check():
+        print("Quick Translate 已在运行中")
+        sys.exit(0)
 
-    # ── 1. Load config ──
+    logger = setup_logging()
+    logger.info("Quick Translate 启动中...")
+
+    from config import load_config, save_config
+    from hotkey import HotkeyListener
+    from dictionary import Dictionary
+    from translator import AITranslator
+    from history import SearchHistory
+    from tray import SystemTrayIcon
+    from error_handler import ErrorHandler
+    from ui import SpotlightUI
+
     cfg = load_config()
-    setup_logging(
-        level=cfg.logging.level,
-        file_enabled=cfg.logging.file_enabled,
-        max_size_mb=cfg.logging.max_size_mb,
-    )
-    logger.info("Quick Translate v1.2.0 starting...")
 
-    # ── 2. Load dictionary (2-phase: preload → background) ──
-    dict_path = cfg.dictionary.dict_path
+    # 错误处理器
+    error_handler = ErrorHandler()
+
+    # 加载词典
+    dict_path = cfg["dictionary"]["dict_path"]
     if not os.path.isabs(dict_path):
         dict_path = os.path.join(PROJECT_DIR, dict_path)
+    dictionary = Dictionary(dict_path)
+    logger.info(f"词典加载完成: {dictionary.word_count} 词条")
 
-    dictionary = Dictionary(
-        dict_path=dict_path,
-        preload_count=cfg.dictionary.preload_count,
-        cache_size=cfg.dictionary.cache_size,
-    )
-
-    def on_dict_fully_loaded():
-        logger.info("Background dictionary load complete — {} words, cache hit rate: {}",
-                     dictionary.word_count, dictionary.cache_stats.get("hit_rate", "N/A"))
-
-    dictionary.load(on_background_complete=on_dict_fully_loaded)
-
-    # ── 3. AI Translator ──
+    # AI 翻译
     ai = AITranslator(
-        api_base=cfg.ai.api_base,
-        api_key=cfg.ai.api_key,
-        model=cfg.ai.model,
-        system_prompt=cfg.ai.system_prompt,
+        api_base=cfg["ai"]["api_base"],
+        api_key=cfg["ai"]["api_key"],
+        model=cfg["ai"]["model"],
+        system_prompt=cfg["ai"]["system_prompt"],
     )
+    if ai.is_configured:
+        logger.info(f"AI 翻译: {cfg['ai']['model']}")
 
-    # ── 4. Multi-dict sources ──
-    local_source = LocalDictSource(dictionary)
-    youdao_source = YoudaoDictSource()
-
-    # ── 5. History ──
+    # 查词历史
     history = SearchHistory(max_size=50)
 
-    # ── 6. Search function (local first, youdao fallback) ──
+    # 搜索函数
     def search(query: str):
-        results = dictionary.search(query, limit=20)
-        # If no local results and query looks like a single word, try youdao
-        if not results and len(query.split()) == 1 and len(query) < 30:
-            youdao_result = youdao_source.lookup(query)
-            if youdao_result:
-                results = [youdao_result]
-        return results
+        return dictionary.search_fuzzy(query, limit=20)
 
-    # ── 7. Translate function ──
+    # 翻译函数
     def translate(text, callback, error_callback):
         if not ai.is_configured:
-            error_callback("AI 翻译未配置。请在 ~/.quick-translate/config.json 中设置 api_key")
+            error_callback("AI 翻译未配置")
             return
-        if not cfg.ai.enabled:
+        if not cfg["ai"]["enabled"]:
             error_callback("AI 翻译已禁用")
             return
         ai.translate(text, callback, error_callback)
 
-    # ── 8. Build UI ──
-    ui = SpotlightUI(
-        cfg,
-        on_search=search,
-        on_translate=translate,
-        history=history,
-    )
+    # 构建 UI
+    ui = SpotlightUI(cfg, on_search=search, on_translate=translate, history=history)
 
-    # ── 9. Clipboard monitor ──
-    def on_clipboard_text(text: str):
-        """Called when clipboard has new translatable text."""
-        ui.root.after(0, lambda: ui.show_and_search(text))
-
-    clipboard = ClipboardMonitor(
-        on_text=on_clipboard_text,
-        min_length=cfg.clipboard.min_length,
-        auto_translate=cfg.clipboard.monitor_enabled,
-    )
-    clipboard.start()
-
-    # ── 10. Hotkey ──
+    # 热键
     def on_hotkey():
         ui.root.after(0, ui.toggle)
 
     hk = HotkeyListener(
-        shift=cfg.hotkey.shift,
-        ctrl=cfg.hotkey.ctrl,
-        alt=cfg.hotkey.alt,
-        key=cfg.hotkey.key,
+        shift=cfg["hotkey"]["shift"],
+        ctrl=cfg["hotkey"]["ctrl"],
+        alt=cfg["hotkey"]["alt"],
+        key=cfg["hotkey"]["key"],
         callback=on_hotkey,
     )
     hk.start()
 
-    # ── 11. System Tray ──
-    _mods = []
-    if cfg.hotkey.shift: _mods.append("Shift")
-    if cfg.hotkey.ctrl: _mods.append("Ctrl")
-    if cfg.hotkey.alt: _mods.append("Alt")
-    if cfg.hotkey.win: _mods.append("Win")
-    _mods.append(cfg.hotkey.key.upper())
+    # 系统托盘
     tray = SystemTrayIcon(
-        tooltip=f"Quick Translate ({'+'.join(_mods)})",
+        tooltip="Quick Translate (Shift+Ctrl+M)",
         on_toggle=lambda: ui.root.after(0, ui.toggle),
         on_exit=lambda: ui.root.after(0, ui.root.destroy),
     )
     tray.start()
 
-    # ── 12. Ready ──
-    t_ready = time.perf_counter()
-    startup_ms = (t_ready - t_start) * 1000
-    features = ["dict", "ai"]
-    if cfg.clipboard.monitor_enabled:
-        features.append("clipboard")
-    logger.info("Ready! Startup: {:.0f}ms | Features: {} | Dictionary: {} words",
-                startup_ms, "+".join(features), dictionary.word_count)
-    print(f"[QuickTranslate] Ready in {startup_ms:.0f}ms! Press Shift+Ctrl+M to open.")
-    print(f"[QuickTranslate] Features: {', '.join(features)} | {dictionary.word_count} words")
+    print(f"[QuickTranslate] Ready! Press Shift+Ctrl+M to open.")
+    print(f"[QuickTranslate] Dictionary: {dictionary.word_count} words")
 
     try:
         ui.run()
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        logger.error(f"未捕获异常: {e}", exc_info=True)
     finally:
         ui._save_position()
+        cfg["window_position"] = cfg.get("window_position", {})
         save_config(cfg)
-        clipboard.stop()
         tray.stop()
         hk.stop()
-        logger.info("Shutdown complete")
-        print("[QuickTranslate] Bye!")
+        instance.release()
+        logger.info("Quick Translate 已退出")
 
 
 if __name__ == "__main__":
