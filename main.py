@@ -110,16 +110,19 @@ def main():
     # 错误处理器
     error_handler = ErrorHandler()
 
-    # 加载 MDX 原生词典
+    # 加载 MDX 原生词典（后台初始化，不阻塞启动）
     from src.core.dict.mdx_dict import MDXDictionary
+    import threading
     mdx_path = os.path.join(PROJECT_DIR, "data", "dict",
                             "牛津高阶第10版英汉双解V132", "牛津高阶第10版英汉双解V132.mdx")
     mdx_dict = None
     if os.path.exists(mdx_path):
-        logger.info(f"正在初始化 MDX 词典: {mdx_path}")
         mdx_dict = MDXDictionary(mdx_path)
-        mdx_dict.initialize()
-        logger.info(f"MDX 词典就绪: {mdx_dict.word_count:,} 词条")
+        def _init_mdx():
+            mdx_dict.initialize()
+            logger.info(f"MDX 词典就绪: {mdx_dict.word_count:,} 词条")
+        threading.Thread(target=_init_mdx, daemon=True).start()
+        logger.info("MDX 词典后台初始化中...")
 
     # 加载 JSON 词典 (MDX 的 fallback)
     dict_path = cfg["dictionary"]["dict_path"]

@@ -76,7 +76,7 @@ class SpotlightUI:
         except Exception:
             pass
 
-        self.root.bind("<Escape>", lambda e: self.hide())
+        self.root.bind("<Escape>", self._on_escape)
         self.root.bind("<FocusIn>", self._on_focus_in)
         self.root.bind("<FocusOut>", self._on_focus_out)
         self._drag_x = 0
@@ -291,6 +291,17 @@ class SpotlightUI:
         self._def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
         self._bind_drag(self._def_frame)
 
+        # 返回按钮（详情模式下显示）
+        self._back_btn = tk.Label(
+            self._def_frame, text="← 返回列表",
+            font=("Segoe UI", 9), bg=p.bg_primary, fg=p.text_tertiary,
+            cursor="hand2", anchor="w",
+        )
+        self._back_btn.pack(fill=tk.X, pady=(0, 2))
+        self._back_btn.bind("<Button-1>", lambda e: self._show_list_mode())
+        self._back_btn.bind("<Enter>", lambda e: self._back_btn.config(fg=p.accent_primary))
+        self._back_btn.bind("<Leave>", lambda e: self._back_btn.config(fg=p.text_tertiary))
+
         self.def_title = tk.Label(
             self._def_frame, text="输入单词开始查询…",
             font=s.get_font('result_title', 'bold'),
@@ -337,6 +348,14 @@ class SpotlightUI:
             self._def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
             self._detail_mode = True
 
+    def _on_escape(self, event=None):
+        """Escape: 详情模式→列表模式，列表模式→关闭窗口"""
+        if self._detail_mode:
+            self._show_list_mode()
+            self.entry.focus_set()
+        else:
+            self.hide()
+
     # ── 搜索逻辑 ──
 
     def _on_key(self, event):
@@ -377,16 +396,23 @@ class SpotlightUI:
         self._ai_pending_query = None
 
         if not self._matches:
-            self.listbox.insert(tk.END, f"  🤖 本地无结果，按 Enter AI 翻译")
+            self.listbox.insert(tk.END, "  🤖 本地无结果，按 Enter AI 翻译")
             self._ai_pending_query = query
             return
 
-        for m in self._matches:
+        # 限制显示数量避免渲染卡顿
+        display = self._matches[:30]
+
+        for m in display:
             word = m["word"]
+            phon = m.get("phonetic", "")
             defn = m.get("definition", "").split("\n")[0]
             if len(defn) > 22:
                 defn = defn[:22] + "…"
-            self.listbox.insert(tk.END, f"  {word}  {defn}")
+            if phon:
+                self.listbox.insert(tk.END, f"  {word}  {phon}  {defn}")
+            else:
+                self.listbox.insert(tk.END, f"  {word}  {defn}")
 
         # 自动选中第一项（但不显示详情，保持列表模式）
         self.listbox.selection_set(0)
@@ -480,8 +506,7 @@ class SpotlightUI:
         if sel and self._matches:
             idx = sel[0]
             if idx < len(self._matches):
-                word = self._matches[idx]["word"]
-                self._trigger_ai(word)
+                self._show_definition(idx)
 
     # ── 释义显示 ──
     def _show_definition(self, idx: int, record_history=True):
