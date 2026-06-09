@@ -459,15 +459,16 @@ class SpotlightUI:
                 self._trigger_ai(word)
 
     # ── 释义显示 ──
-
     def _show_definition(self, idx: int, record_history=True):
+        """选中即展示完整释义（优先 MDX 富文本）"""
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
             word = m["word"]
-            defn = m.get("definition", "无释义")
+            # 优先使用 MDX 富文本（含音标、例句、中英对照）
+            defn = m.get("text") or m.get("definition", "无释义")
             self._set_definition(word, defn)
             if record_history and self.history:
-                self.history.add(word, defn)
+                self.history.add(word, m.get("definition", "")[:80])
 
     def _set_definition(self, title: str, content: str):
         self.def_title.config(text=title)
