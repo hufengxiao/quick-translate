@@ -32,6 +32,7 @@ class SpotlightUI:
         self._settings_win = None
         self._toast_after = None
         self._ai_pending_query = None
+        self._detail_mode = False  # False=list mode, True=detail mode
 
         self._build_window()
         self._build_widgets()
@@ -268,11 +269,11 @@ class SpotlightUI:
         self.entry.bind("<Tab>", self._on_tab)
 
         # ── 候选列表 ──
-        list_frame = tk.Frame(main, bg=p.bg_secondary)
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
+        self._list_frame = tk.Frame(main, bg=p.bg_secondary)
+        self._list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
 
         self.listbox = tk.Listbox(
-            list_frame, font=("Consolas", 10),
+            self._list_frame, font=("Consolas", 10),
             bg=p.bg_secondary, fg=p.text_primary,
             selectbackground=p.bg_elevated,
             selectforeground=p.accent_primary,
@@ -285,13 +286,13 @@ class SpotlightUI:
         self.listbox.bind("<<ListboxSelect>>", self._on_list_select)
         self.listbox.bind("<Double-Button-1>", self._on_double_click)
 
-        # ── 释义面板 ──
-        def_frame = tk.Frame(main, bg=p.bg_primary)
-        def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
-        self._bind_drag(def_frame)
+        # ── 释义面板（初始隐藏）──
+        self._def_frame = tk.Frame(main, bg=p.bg_primary)
+        self._def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
+        self._bind_drag(self._def_frame)
 
         self.def_title = tk.Label(
-            def_frame, text="输入单词开始查询…",
+            self._def_frame, text="输入单词开始查询…",
             font=s.get_font('result_title', 'bold'),
             bg=p.bg_primary, fg=p.accent_primary, anchor="w",
         )
@@ -299,7 +300,7 @@ class SpotlightUI:
         self._bind_drag(self.def_title)
 
         self.def_text = tk.Text(
-            def_frame, font=s.get_font('result_body'),
+            self._def_frame, font=s.get_font('result_body'),
             bg=p.bg_primary, fg=p.text_primary,
             relief=tk.FLAT, highlightthickness=0,
             wrap=tk.WORD, state=tk.DISABLED, cursor="arrow",
@@ -318,6 +319,23 @@ class SpotlightUI:
         self._clear_matches()
         self.entry.focus_set()
         self._clear_btn.pack_forget()
+        self._show_list_mode()
+
+    # ── 模式切换：列表模式 / 详情模式 ──
+
+    def _show_list_mode(self):
+        """显示候选列表，隐藏释义面板"""
+        if self._detail_mode:
+            self._def_frame.pack_forget()
+            self._list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
+            self._detail_mode = False
+
+    def _show_detail_mode(self):
+        """显示释义面板，隐藏候选列表"""
+        if not self._detail_mode:
+            self._list_frame.pack_forget()
+            self._def_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
+            self._detail_mode = True
 
     # ── 搜索逻辑 ──
 
@@ -326,6 +344,9 @@ class SpotlightUI:
                              "Shift_L", "Shift_R", "Control_L", "Control_R",
                              "Alt_L", "Alt_R"):
             return
+        # 详情模式下按键 → 回到列表模式
+        if self._detail_mode:
+            self._show_list_mode()
         self.root.after(1, self._do_search)
 
     def _do_search(self):
@@ -337,7 +358,12 @@ class SpotlightUI:
 
         if not query:
             self._clear_matches()
+            self._show_list_mode()
             return
+
+        # 回到列表模式（如果之前在详情模式）
+        self._show_list_mode()
+
         try:
             self._matches = self.on_search(query)
             self._update_listbox(query)
@@ -353,7 +379,6 @@ class SpotlightUI:
         if not self._matches:
             self.listbox.insert(tk.END, f"  🤖 本地无结果，按 Enter AI 翻译")
             self._ai_pending_query = query
-            self._set_definition("未找到本地释义", f"按 Enter 使用 AI 翻译 \"{query}\"")
             return
 
         for m in self._matches:
@@ -363,10 +388,10 @@ class SpotlightUI:
                 defn = defn[:22] + "…"
             self.listbox.insert(tk.END, f"  {word}  {defn}")
 
+        # 自动选中第一项（但不显示详情，保持列表模式）
         self.listbox.selection_set(0)
         self.listbox.activate(0)
         self._selected_idx = 0
-        self._show_definition(0, record_history=False)
 
     def _clear_matches(self):
         self._matches = []
@@ -394,7 +419,6 @@ class SpotlightUI:
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(self._selected_idx)
             self.listbox.see(self._selected_idx)
-            self._show_definition(self._selected_idx)
         return "break"
 
     def _on_arrow_up(self, event):
@@ -403,16 +427,16 @@ class SpotlightUI:
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(self._selected_idx)
             self.listbox.see(self._selected_idx)
-            self._show_definition(self._selected_idx)
         return "break"
 
     def _on_enter(self, event):
+        # 有 AI 待翻译 → 触发 AI
         if self._ai_pending_query:
             self._trigger_ai(self._ai_pending_query)
             return "break"
+        # 有选中词条 → 显示详情
         if 0 <= self._selected_idx < len(self._matches):
-            word = self._matches[self._selected_idx]["word"]
-            self._trigger_ai(word)
+            self._show_definition(self._selected_idx)
         return "break"
 
     def _on_tab(self, event):
@@ -422,7 +446,8 @@ class SpotlightUI:
         return "break"
 
     def _trigger_ai(self, query: str):
-        self._set_definition("🤖 AI 翻译中…", f"正在翻译 \"{query}\"，请稍候…")
+        self._set_definition("🤖 AI 翻译中…", f'正在翻译 "{query}"，请稍候…')
+        self._show_detail_mode()
         self.on_translate(query, self._on_ai_result, self._on_ai_error)
 
     def _on_ai_result(self, text: str):
@@ -460,13 +485,13 @@ class SpotlightUI:
 
     # ── 释义显示 ──
     def _show_definition(self, idx: int, record_history=True):
-        """选中即展示完整释义（优先 MDX 富文本）"""
+        """选中即展示完整释义（切换到详情模式）"""
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
             word = m["word"]
-            # 优先使用 MDX 富文本（含音标、例句、中英对照）
             defn = m.get("text") or m.get("definition", "无释义")
             self._set_definition(word, defn)
+            self._show_detail_mode()  # 切换到详情面板
             if record_history and self.history:
                 self.history.add(word, m.get("definition", "")[:80])
 
