@@ -1,0 +1,7 @@
+{
+  "granularity": "standard",
+  "auto_commit": true,
+  "auto_push": true,
+  "test_command": "python ci_test.py",
+  "runtime": "hermes"
+}
