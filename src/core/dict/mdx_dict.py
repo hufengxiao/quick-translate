@@ -47,11 +47,18 @@ class MDXDictionary:
         self._build_db()
 
     def _load_db(self) -> None:
-        """Load existing SQLite database."""
+        """Load existing SQLite database with optimized settings."""
         t0 = time.perf_counter()
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        # 性能优化 PRAGMA
         self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA cache_size=-8000")  # 8MB cache
+        self._conn.execute("PRAGMA cache_size=-16000")  # 16MB cache
+        self._conn.execute("PRAGMA mmap_size=268435456")  # 256MB mmap
+        self._conn.execute("PRAGMA temp_store=MEMORY")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        # 预编译常用查询（lazy init）
+        self._stmt_exact = None
+        self._stmt_prefix = None
         row = self._conn.execute("SELECT COUNT(*) FROM entries").fetchone()
         self._word_count = row[0]
         self._ready = True
@@ -250,12 +257,15 @@ class MDXDictionary:
         }
 
     def search_prefix(self, prefix: str, limit: int = 20) -> List[Dict[str, str]]:
-        """Prefix search."""
+        """Prefix search using range query (faster than LIKE)."""
         if not self._ready or not self._conn:
             return []
+        p = prefix.lower()
+        # Range query: word >= 'prefix' AND word < 'prefiy' (next char)
+        next_prefix = p[:-1] + chr(ord(p[-1]) + 1) if p else ""
         rows = self._conn.execute(
-            "SELECT word, phonetic, pos, definition FROM entries WHERE word LIKE ? LIMIT ?",
-            (prefix.lower() + "%", limit),
+            "SELECT word, phonetic, pos, definition FROM entries WHERE word >= ? AND word < ? LIMIT ?",
+            (p, next_prefix, limit),
         ).fetchall()
         return [
             {"word": r[0], "phonetic": r[1] or "", "pos": r[2] or "", "definition": r[3] or ""}

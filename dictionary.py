@@ -1,4 +1,5 @@
 """本地词典查询模块 — MDX 原生词典 + JSON fallback"""
+import bisect
 import json
 import os
 import re
@@ -13,6 +14,8 @@ class Dictionary:
         self.sorted_keys: List[str] = []
         self.dict_path = dict_path
         self._mdx = mdx_dict  # MDXDictionary instance (optional)
+        self._cache: Dict[str, List[Dict]] = {}  # 查询缓存
+        self._cache_max = 200
         self._load()
 
     def _load(self):
@@ -42,20 +45,29 @@ class Dictionary:
             results = self._mdx.search_prefix(prefix, limit)
             if results:
                 return results
-        # JSON fallback
+        # JSON fallback — bisect O(log n) instead of linear scan
         prefix_lower = prefix.lower()
         results = []
-        for key in self.sorted_keys:
+        idx = bisect.bisect_left(self.sorted_keys, prefix_lower)
+        while idx < len(self.sorted_keys) and len(results) < limit:
+            key = self.sorted_keys[idx]
             if key.startswith(prefix_lower):
                 results.append({"word": key, "definition": self.entries[key]})
-                if len(results) >= limit:
-                    break
+            else:
+                break  # sorted, no more matches
+            idx += 1
         return results
 
     def search_fuzzy(self, query: str, limit: int = 20) -> List[Dict[str, str]]:
         if not query:
             return []
         query_lower = query.lower()
+
+        # 缓存命中
+        cache_key = f"{query_lower}:{limit}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         results = []
 
         # MDX exact match first
@@ -65,6 +77,7 @@ class Dictionary:
                 results.append({
                     "word": entry["word"],
                     "definition": entry["definition"],
+                    "phonetic": entry.get("phonetic", ""),
                     "text": entry.get("text", ""),
                 })
 
@@ -79,21 +92,33 @@ class Dictionary:
                     if len(results) >= limit:
                         break
 
-        # JSON fallback if no MDX results
+        # JSON fallback — bisect
         if not results:
             if query_lower in self.entries:
                 results.append({"word": query_lower, "definition": self.entries[query_lower]})
-            for key in self.sorted_keys:
+            # Prefix via bisect
+            idx = bisect.bisect_left(self.sorted_keys, query_lower)
+            while idx < len(self.sorted_keys) and len(results) < limit:
+                key = self.sorted_keys[idx]
                 if key.startswith(query_lower) and key != query_lower:
                     results.append({"word": key, "definition": self.entries[key]})
-                    if len(results) >= limit:
-                        break
+                elif not key.startswith(query_lower):
+                    break
+                idx += 1
+            # Contains fallback
             if len(results) < limit:
+                seen = {r["word"] for r in results}
                 for key in self.sorted_keys:
-                    if query_lower in key and not key.startswith(query_lower):
+                    if query_lower in key and key not in seen and not key.startswith(query_lower):
                         results.append({"word": key, "definition": self.entries[key]})
+                        seen.add(key)
                         if len(results) >= limit:
                             break
+
+        # 缓存
+        if len(self._cache) >= self._cache_max:
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[cache_key] = results
 
         return results
 
