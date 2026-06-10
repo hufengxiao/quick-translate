@@ -180,6 +180,50 @@ test("Theme", test_theme)
 test("Translator", test_translator)
 test("No TTS", test_no_tts)
 
+
+# 11. Startup benchmark
+def test_startup():
+    import subprocess
+    # Cold startup (no .db cache)
+    t0 = time.perf_counter()
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0,'.');"
+         "from dictionary import Dictionary;"
+         "d = Dictionary('data/dict/ecdict.json');"
+         "print(f'words={d.word_count}')"],
+        capture_output=True, text=True, timeout=10, cwd=".",
+    )
+    elapsed = (time.perf_counter() - t0) * 1000
+    assert r.returncode == 0, f"Startup failed: {r.stderr}"
+    assert "words=" in r.stdout
+    print(f"  JSON dict startup: {elapsed:.0f}ms")
+    assert elapsed < 5000, f"Startup too slow: {elapsed:.0f}ms > 5000ms"
+
+
+test("Startup", test_startup)
+
+
+# 12. Query performance
+def test_query_perf():
+    from src.core.dict.mdx_dict import MDXDictionary
+    mdx_path = "data/dict/牛津高阶第10版英汉双解V132/牛津高阶第10版英汉双解V132.mdx"
+    if not os.path.exists(mdx_path):
+        print("  MDX not found, skipping")
+        return
+    mdx = MDXDictionary(mdx_path)
+    mdx.initialize()
+    import timeit
+    t = timeit.timeit(lambda: mdx.lookup("hello"), number=100) / 100 * 1000
+    print(f"  MDX exact lookup: {t:.2f}ms")
+    assert t < 50.0, f"Lookup too slow: {t:.2f}ms > 50ms"
+    t2 = timeit.timeit(lambda: mdx.search_prefix("trans", 10), number=100) / 100 * 1000
+    print(f"  MDX prefix search: {t2:.2f}ms")
+    assert t2 < 1.0, f"Prefix too slow: {t2:.2f}ms > 1ms"
+
+
+test("Query Perf", test_query_perf)
+
 print(f"\nResults: {10 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
