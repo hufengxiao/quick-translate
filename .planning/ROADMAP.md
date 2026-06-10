@@ -23,9 +23,9 @@
 - [x] 词性提取修复
 - [x] 后台加载不阻塞启动
 
-### Phase 3: Performance & Stability
+### Phase 3: Performance & Stability ✅
 **Goal:** 启动 < 2s，搜索无卡顿，内存 < 100MB
-**Status:** IN PROGRESS
+**Status:** DONE
 
 - [ ] Trie/BKTree 索引持久化到磁盘（跳过重建）
 - [ ] MDX SQLite WAL 模式优化
