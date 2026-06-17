@@ -13,18 +13,18 @@ a = Analysis(
     pathex=[ROOT],
     binaries=[],
     datas=[
-        (os.path.join(ROOT, 'data'), 'data'),
+        (os.path.join(ROOT, 'data', 'dict', 'ecdict.json'), os.path.join('data', 'dict')),
+        (os.path.join(ROOT, 'data', 'icon.ico'), 'data'),
     ],
     hiddenimports=[
-        'src', 'src.core', 'src.core.index', 'src.core.cache',
-        'src.core.lazy', 'src.core.dict', 'src.ui', 'src.ui.theme',
+        'config', 'dictionary', 'translator', 'hotkey', 'history', 'tray', 'ui',
+        'styles', 'animations', 'error_handler',
+        'src', 'src.core', 'src.core.dict', 'src.core.dict.mdx_dict',
+        'src.ui', 'src.ui.theme', 'src.ui.animator', 'src.ui.layout',
         'src.utils', 'src.utils.config', 'src.utils.errors',
         'src.utils.logging', 'src.utils.performance',
         'src.services', 'src.services.clipboard',
         'src.services.dict_sources', 'src.services.dict_sources.sources',
-        'src.core.dict.mdx_dict', 'src.core.dict.dictionary',
-        'src.core.index.exact', 'src.core.index.trie', 'src.core.index.bktree',
-        'src.core.cache.lru',
     ],
     hookspath=[],
     hooksconfig={},
@@ -33,6 +33,7 @@ a = Analysis(
         'matplotlib', 'numpy', 'pandas', 'scipy', 'PIL',
         'tkinter.test', 'unittest', 'test', 'doctest',
         'xmlrpc', 'pydoc', 'pdb',
+        'mdict_utils', 'readmdict',  # MDX CLI tools (not needed at runtime)
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -53,7 +54,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,           # compress with UPX if available
+    upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,       # no console window

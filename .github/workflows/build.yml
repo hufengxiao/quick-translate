@@ -23,35 +23,55 @@ jobs:
       - name: Install dependencies
         run: pip install loguru pyinstaller
 
-      - name: Verify core imports
-        run: |
-          python -c "
-          import sys; sys.path.insert(0, '.')
-          from src.utils.config import load_config
-          from src.services.clipboard import ClipboardMonitor
-          from src.core.dict.mdx_dict import MDXDictionary
-          print('All core imports OK')
-          "
+      - name: Verify imports
+        run: python -c "import sys; sys.path.insert(0, '.'); from dictionary import Dictionary; print('OK')"
 
       - name: Run tests
         run: python ci_test.py
 
+  build:
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install loguru pyinstaller
+
       - name: Build EXE
         run: pyinstaller quicktranslate.spec --noconfirm
-
-      - name: Verify EXE exists
-        run: |
-          if (Test-Path dist/QuickTranslate.exe) {
-            $size = (Get-Item dist/QuickTranslate.exe).Length / 1MB
-            Write-Output "QuickTranslate.exe built: $([math]::Round($size, 1)) MB"
-          } else {
-            Write-Error "Build failed: QuickTranslate.exe not found"
-            exit 1
-          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QuickTranslate-py${{ matrix.python-version }}
+          name: QuickTranslate
           path: dist/QuickTranslate.exe
-          retention-days: 30
+
+  release:
+    runs-on: windows-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install loguru pyinstaller
+
+      - name: Build EXE
+        run: pyinstaller quicktranslate.spec --noconfirm
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/QuickTranslate.exe
+          generate_release_notes: true

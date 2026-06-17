@@ -208,6 +208,17 @@ def main():
         clipboard_monitor.start()
         logger.info("剪贴板监听已开启")
 
+    # 自动更新检测
+    try:
+        from updater import UpdateChecker
+        def _on_update(version, url):
+            logger.info(f"发现新版本: v{version} — {url}")
+            print(f"[QuickTranslate] 发现新版本 v{version}: {url}")
+        update_checker = UpdateChecker(on_update=_on_update)
+        update_checker.check_async()
+    except Exception:
+        pass  # 更新检测失败不影响主程序
+
     print(f"[QuickTranslate] Ready! Press Shift+Ctrl+M to open.")
     print(f"[QuickTranslate] Dictionary: {dictionary.word_count} words")
 

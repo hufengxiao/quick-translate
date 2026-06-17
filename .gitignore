@@ -18,3 +18,9 @@ data/dict/oxford10.db
 
 # Config (user-specific)
 ~/.quick-translate/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
+installer/

@@ -35,13 +35,13 @@
 
 ### Phase 4: Feature Completion
 **Goal:** 剪贴板监听、打包分发
-**Status:** PLANNED
+**Status:** DONE
 
 - [x] 剪贴板监听自动翻译（Win32 AddClipboardFormatListener）
-- [ ] PyInstaller 单文件 EXE
-- [ ] Inno Setup 安装程序
-- [ ] 自动更新检测
-- [ ] GitHub Actions CI/CD
+- [x] PyInstaller 单文件 EXE
+- [x] Inno Setup 安装程序
+- [x] 自动更新检测
+- [x] GitHub Actions CI/CD
 
 ### Phase 5: Polish & Ship
 **Goal:** 达到苹果级产品标准
