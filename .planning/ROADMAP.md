@@ -37,7 +37,7 @@
 **Goal:** 剪贴板监听、打包分发
 **Status:** PLANNED
 
-- [ ] 剪贴板监听自动翻译（Win32 AddClipboardFormatListener）
+- [x] 剪贴板监听自动翻译（Win32 AddClipboardFormatListener）
 - [ ] PyInstaller 单文件 EXE
 - [ ] Inno Setup 安装程序
 - [ ] 自动更新检测
