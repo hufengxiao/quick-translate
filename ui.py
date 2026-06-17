@@ -240,6 +240,21 @@ class SpotlightUI:
         self._build_widgets()
         self.anim = AnimationEngine(self.root)
 
+    # ── 新用户引导 ──
+
+    def _show_guide(self):
+        """首次启动引导 toast 序列"""
+        tips = [
+            ("Shift+Ctrl+M 唤出窗口", 3000),
+            ("输入英文查词，↑↓ 选择", 3000),
+            ("Enter 查看详情 | Esc 返回", 3000),
+            ("Tab AI翻译 | 点击释义复制", 3000),
+        ]
+        delay = 500
+        for text, duration in tips:
+            self.root.after(delay, lambda t=text, d=duration: self._show_toast(t, d))
+            delay += duration + 200
+
     # ── Toast ──
 
     def _show_toast(self, text, duration=2000):
@@ -366,9 +381,8 @@ class SpotlightUI:
         self.def_text.pack(fill=tk.BOTH, expand=True)
         self.def_text.bind("<Button-1>", self._on_copy_definition)
 
-        # 首次启动 toast
-        self.root.after(500, lambda: self._show_toast(
-            "Shift+Ctrl+M 唤出  |  ↑↓选择  |  Enter AI翻译", 4000))
+        # 新用户引导 toast 序列
+        self._show_guide()
 
     # ── 清空输入 ──
 

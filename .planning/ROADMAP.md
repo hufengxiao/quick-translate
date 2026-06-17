@@ -43,12 +43,12 @@
 - [x] 自动更新检测
 - [x] GitHub Actions CI/CD
 
-### Phase 5: Polish & Ship
+### Phase 5: Polish & Ship ✅
 **Goal:** 达到苹果级产品标准
-**Status:** PLANNED
+**Status:** DONE
 
 - [x] 高对比度主题
-- [ ] 新用户引导
-- [ ] 完整 README + 截图
-- [ ] 性能基准测试
-- [ ] v1.0 Release
+- [x] 新用户引导
+- [x] 完整 README + 截图
+- [x] 性能基准测试
+- [x] v1.0 Release
