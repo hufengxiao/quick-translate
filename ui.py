@@ -22,7 +22,8 @@ class SpotlightUI:
         self.history = history
 
         # 设计系统
-        self.sm = StyleManager('dark')
+        theme_name = config.get("ui", {}).get("theme", "dark")
+        self.sm = StyleManager(theme_name)
         self.p = self.sm.palette
 
         self.opacity = config["ui"]["opacity"]
@@ -153,7 +154,7 @@ class SpotlightUI:
         rx = self.root.winfo_x()
         ry = self.root.winfo_y()
         rw = self.root.winfo_width()
-        win.geometry(f"220x70+{rx + rw - 220}+{ry + 5}")
+        win.geometry(f"220x110+{rx + rw - 220}+{ry + 5}")
 
         try:
             hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
@@ -179,7 +180,40 @@ class SpotlightUI:
             highlightthickness=0, troughcolor=self.p.bg_primary,
             sliderrelief=tk.FLAT, length=190, showvalue=True,
             bd=0, font=("Segoe UI", 8),
-        ).pack(padx=10, pady=(0, 6))
+        ).pack(padx=10, pady=(0, 4))
+
+        # Theme switcher
+        theme_frame = tk.Frame(win, bg=self.p.bg_tertiary)
+        theme_frame.pack(fill=tk.X, padx=10, pady=(0, 6))
+
+        themes = [("深色", "dark"), ("浅色", "light"), ("高对比", "high_contrast")]
+        current = self.sm.theme
+        for label, name in themes:
+            is_active = (name == current)
+            fg = self.p.accent_primary if is_active else self.p.text_tertiary
+            btn = tk.Label(
+                theme_frame, text=label, font=("Segoe UI", 9),
+                bg=self.p.bg_tertiary, fg=fg, cursor="hand2",
+                padx=6, pady=2,
+            )
+            btn.pack(side=tk.LEFT, expand=True)
+
+            def on_enter(e, b=btn, n=name):
+                if n != self.sm.theme:
+                    b.config(fg=self.p.text_primary)
+
+            def on_leave(e, b=btn, n=name, active=(name == current)):
+                if n != self.sm.theme:
+                    b.config(fg=self.p.text_tertiary)
+
+            def on_click(e, n=name):
+                self._apply_theme(n)
+                self._settings_win.destroy()
+                self._settings_win = None
+
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+            btn.bind("<Button-1>", on_click)
 
         def close_settings(e=None):
             if self._settings_win:
@@ -192,6 +226,19 @@ class SpotlightUI:
     def _set_opacity(self, value):
         self.opacity = value
         self.root.attributes("-alpha", self.opacity)
+
+    def _apply_theme(self, theme_name: str):
+        """Switch theme and rebuild the UI with new colors."""
+        self.sm.set_theme(theme_name)
+        self.p = self.sm.palette
+        self.cfg["ui"]["theme"] = theme_name
+        # Update root window background
+        self.root.configure(bg=self.p.bg_primary)
+        # Rebuild UI with new colors
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        self._build_widgets()
+        self.anim = AnimationEngine(self.root)
 
     # ── Toast ──
 

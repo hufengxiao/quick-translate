@@ -157,13 +157,75 @@ LIGHT_PALETTE = ColorPalette(
 )
 
 
+# ============ 高对比度主题 ============
+
+HIGH_CONTRAST_PALETTE = ColorPalette(
+    bg_primary='#000000',
+    bg_secondary='#1a1a1a',
+    bg_tertiary='#333333',
+    bg_elevated='#444444',
+    bg_glass='rgba(0, 0, 0, 0.95)',
+
+    text_primary='#ffffff',
+    text_secondary='#cccccc',
+    text_tertiary='#999999',
+    text_placeholder='#666666',
+
+    border_subtle='#555555',
+    border_default='#888888',
+    border_focus='#ffd700',
+
+    accent_primary='#ffd700',
+    accent_secondary='#ffea00',
+
+    success='#00ff00',
+    warning='#ffff00',
+    error='#ff0000',
+    info='#00ffff',
+)
+
+
+# ============ 高对比度主题（无障碍） ============
+
+HIGH_CONTRAST_PALETTE = ColorPalette(
+    bg_primary='#000000',
+    bg_secondary='#111111',
+    bg_tertiary='#222222',
+    bg_elevated='#333333',
+    bg_glass='rgba(0, 0, 0, 0.95)',
+
+    text_primary='#FFFFFF',
+    text_secondary='#E0E0E0',
+    text_tertiary='#BBBBBB',
+    text_placeholder='#888888',
+
+    border_subtle='#444444',
+    border_default='#666666',
+    border_focus='#FFD700',
+
+    accent_primary='#FFD700',
+    accent_secondary='#FFF080',
+
+    success='#00FF00',
+    warning='#FFFF00',
+    error='#FF4444',
+    info='#00DDFF',
+)
+
+
 # ============ 单例管理 ============
 
 class StyleManager:
     """样式管理器"""
 
+    THEMES = {
+        'dark': DARK_PALETTE,
+        'light': LIGHT_PALETTE,
+        'high_contrast': HIGH_CONTRAST_PALETTE,
+    }
+
     def __init__(self, theme: str = 'dark'):
-        self._theme = theme
+        self._theme = theme if theme in self.THEMES else 'dark'
         self.spacing = Spacing()
         self.radius = Radius()
         self.animation = Animation()
@@ -176,14 +238,15 @@ class StyleManager:
 
     @property
     def palette(self) -> ColorPalette:
-        return DARK_PALETTE if self._theme == 'dark' else LIGHT_PALETTE
+        return self.THEMES.get(self._theme, DARK_PALETTE)
 
     @property
     def theme(self) -> str:
         return self._theme
 
     def set_theme(self, theme: str):
-        object.__setattr__(self, '_theme', theme)
+        if theme in self.THEMES:
+            object.__setattr__(self, '_theme', theme)
 
     def get_font(self, size_key: str, weight: str = 'normal') -> tuple:
         """获取 tkinter 字体元组"""

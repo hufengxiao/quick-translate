@@ -36,6 +36,7 @@ class UIConfig:
     height: int = 520
     opacity: float = 0.96
     font_size: int = 13
+    theme: str = "dark"  # dark / light / high_contrast
     # Apple HIG dark palette
     bg_color: str = "#1C1C1E"
     fg_color: str = "#F5F5F7"
