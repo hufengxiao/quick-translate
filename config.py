@@ -47,6 +47,11 @@ DEFAULT_CONFIG = {
     },
     "dictionary": {
         "dict_path": "data/dict/ecdict.json",
+        "mdx_path": "data/dict/牛津高阶第10版英汉双解V132/牛津高阶第10版英汉双解V132.mdx",
+    },
+    "clipboard": {
+        "monitor_enabled": False,
+        "min_length": 2,
     },
 }
 

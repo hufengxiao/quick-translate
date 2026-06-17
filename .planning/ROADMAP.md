@@ -27,11 +27,11 @@
 **Goal:** 启动 < 2s，搜索无卡顿，内存 < 100MB
 **Status:** DONE
 
-- [ ] Trie/BKTree 索引持久化到磁盘（跳过重建）
-- [ ] MDX SQLite WAL 模式优化
-- [ ] 候选列表虚拟化（只渲染可见项）
-- [ ] 内存 profiling + 优化
-- [ ] 启动时间 benchmark CI
+- [x] Trie/BKTree 索引持久化到磁盘（跳过重建）
+- [x] MDX SQLite WAL 模式优化
+- [x] 候选列表虚拟化（只渲染可见项）
+- [x] 内存 profiling + 优化
+- [x] 启动时间 benchmark CI
 
 ### Phase 4: Feature Completion
 **Goal:** 剪贴板监听、打包分发

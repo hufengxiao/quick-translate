@@ -107,22 +107,28 @@ def main():
 
     cfg = load_config()
 
+    import tkinter as tk
+
     # 错误处理器
     error_handler = ErrorHandler()
 
     # 加载 MDX 原生词典（后台初始化，不阻塞启动）
     from src.core.dict.mdx_dict import MDXDictionary
     import threading
-    mdx_path = os.path.join(PROJECT_DIR, "data", "dict",
-                            "牛津高阶第10版英汉双解V132", "牛津高阶第10版英汉双解V132.mdx")
+    mdx_path_cfg = cfg["dictionary"].get("mdx_path",
+        "data/dict/牛津高阶第10版英汉双解V132/牛津高阶第10版英汉双解V132.mdx")
+    if not os.path.isabs(mdx_path_cfg):
+        mdx_path_cfg = os.path.join(PROJECT_DIR, mdx_path_cfg)
     mdx_dict = None
-    if os.path.exists(mdx_path):
-        mdx_dict = MDXDictionary(mdx_path)
+    if os.path.exists(mdx_path_cfg):
+        mdx_dict = MDXDictionary(mdx_path_cfg)
         def _init_mdx():
             mdx_dict.initialize()
             logger.info(f"MDX 词典就绪: {mdx_dict.word_count:,} 词条")
         threading.Thread(target=_init_mdx, daemon=True).start()
         logger.info("MDX 词典后台初始化中...")
+    else:
+        logger.warning(f"MDX 词典未找到: {mdx_path_cfg}")
 
     # 加载 JSON 词典 (MDX 的 fallback)
     dict_path = cfg["dictionary"]["dict_path"]
@@ -182,6 +188,26 @@ def main():
     )
     tray.start()
 
+    # 剪贴板监听（可选功能，默认关闭）
+    clipboard_monitor = None
+    clip_cfg = cfg.get("clipboard", {})
+    if clip_cfg.get("monitor_enabled", False):
+        from src.services.clipboard import ClipboardMonitor
+        def _on_clipboard_text(text):
+            logger.info(f"剪贴板检测: {text[:50]}")
+            def _apply():
+                ui.show()
+                ui.entry.delete(0, tk.END)
+                ui.entry.insert(0, text)
+                ui._do_search()
+            ui.root.after(0, _apply)
+        clipboard_monitor = ClipboardMonitor(
+            on_text=_on_clipboard_text,
+            min_length=clip_cfg.get("min_length", 2),
+        )
+        clipboard_monitor.start()
+        logger.info("剪贴板监听已开启")
+
     print(f"[QuickTranslate] Ready! Press Shift+Ctrl+M to open.")
     print(f"[QuickTranslate] Dictionary: {dictionary.word_count} words")
 
@@ -192,6 +218,8 @@ def main():
     except Exception as e:
         logger.error(f"未捕获异常: {e}", exc_info=True)
     finally:
+        if clipboard_monitor:
+            clipboard_monitor.stop()
         ui._save_position()
         cfg["window_position"] = cfg.get("window_position", {})
         save_config(cfg)

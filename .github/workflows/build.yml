@@ -23,8 +23,15 @@ jobs:
       - name: Install dependencies
         run: pip install loguru pyinstaller
 
-      - name: Verify imports
-        run: python -c "import sys; sys.path.insert(0, '.'); from src.utils.config import load_config; print('imports OK')"
+      - name: Verify core imports
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from src.utils.config import load_config
+          from src.services.clipboard import ClipboardMonitor
+          from src.core.dict.mdx_dict import MDXDictionary
+          print('All core imports OK')
+          "
 
       - name: Run tests
         run: python ci_test.py
@@ -32,8 +39,19 @@ jobs:
       - name: Build EXE
         run: pyinstaller quicktranslate.spec --noconfirm
 
+      - name: Verify EXE exists
+        run: |
+          if (Test-Path dist/QuickTranslate.exe) {
+            $size = (Get-Item dist/QuickTranslate.exe).Length / 1MB
+            Write-Output "QuickTranslate.exe built: $([math]::Round($size, 1)) MB"
+          } else {
+            Write-Error "Build failed: QuickTranslate.exe not found"
+            exit 1
+          }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QuickTranslate-${{ matrix.python-version }}
+          name: QuickTranslate-py${{ matrix.python-version }}
           path: dist/QuickTranslate.exe
+          retention-days: 30

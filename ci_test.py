@@ -168,6 +168,37 @@ def test_no_tts():
         assert "tts" not in f.read().lower()
 
 
+# 11. Clipboard monitor import
+def test_clipboard():
+    from src.services.clipboard import ClipboardMonitor
+    triggered = []
+    mon = ClipboardMonitor(on_text=lambda t: triggered.append(t), auto_translate=False)
+    assert not mon._running
+    # Test should-ignore logic
+    assert mon._should_ignore("") is True
+    assert mon._should_ignore("a") is True
+    assert mon._should_ignore("hello") is False
+    assert mon._should_ignore("https://example.com") is True
+    assert mon._should_ignore("123.45") is True
+
+
+# 12. Config clipboard fields
+def test_config_clipboard():
+    from src.utils.config import load_config, save_config
+    cfg = load_config()
+    assert hasattr(cfg, 'clipboard')
+    assert cfg.clipboard.monitor_enabled is False
+    assert cfg.clipboard.min_length == 2
+
+
+# 13. MDX path configurable
+def test_mdx_path_config():
+    from config import load_config, save_config
+    cfg = load_config()
+    assert "mdx_path" in cfg["dictionary"]
+    assert "牛津" in cfg["dictionary"]["mdx_path"]
+
+
 print("Running tests...")
 test("Config", test_config)
 test("Errors", test_errors)
@@ -179,9 +210,12 @@ test("Dictionary", test_dictionary)
 test("Theme", test_theme)
 test("Translator", test_translator)
 test("No TTS", test_no_tts)
+test("Clipboard Monitor", test_clipboard)
+test("Config Clipboard", test_config_clipboard)
+test("MDX Path Config", test_mdx_path_config)
 
 
-# 11. Startup benchmark
+# 14. Startup benchmark
 def test_startup():
     import subprocess
     # Cold startup (no .db cache)
@@ -204,7 +238,7 @@ def test_startup():
 test("Startup", test_startup)
 
 
-# 12. Query performance
+# 15. Query performance
 def test_query_perf():
     from src.core.dict.mdx_dict import MDXDictionary
     mdx_path = "data/dict/牛津高阶第10版英汉双解V132/牛津高阶第10版英汉双解V132.mdx"
