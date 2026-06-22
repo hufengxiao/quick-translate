@@ -8,6 +8,7 @@ from typing import Optional, Callable, List, Dict
 
 from styles import StyleManager
 from animations import AnimationEngine
+from settings_panel import SettingsPanel
 
 # POS tag extraction pattern (same as src/ui/spotlight.py)
 _POS_PATTERN = re.compile(
@@ -80,7 +81,7 @@ class SpotlightUI:
         self._visible = False
         self._selected_idx = -1
         self._matches: List[Dict[str, str]] = []
-        self._settings_win = None
+        self._settings_panel = None
         self._toast_after = None
         self._ai_pending_query = None
         self._detail_mode = False  # False=list mode, True=detail mode
@@ -156,7 +157,8 @@ class SpotlightUI:
         self.root.attributes("-alpha", self.opacity)
 
     def _on_focus_out(self, event):
-        if self._settings_win is None:
+        panel_open = self._settings_panel is not None and self._settings_panel.is_open
+        if not panel_open:
             self.root.attributes("-alpha", 0.1)
 
     # ── 按钮 ──
@@ -189,89 +191,35 @@ class SpotlightUI:
     # ── 设置弹窗 ──
 
     def _open_settings(self):
-        if self._settings_win is not None:
-            self._settings_win.destroy()
-            self._settings_win = None
+        if self._settings_panel is not None and self._settings_panel.is_open:
+            self._settings_panel._close()
+            self._settings_panel = None
             return
 
-        win = tk.Toplevel(self.root)
-        win.overrideredirect(True)
-        win.attributes("-topmost", True)
-        win.attributes("-alpha", self.opacity)
-        win.configure(bg=self.p.bg_tertiary)
-        self._settings_win = win
+        def _on_save(new_cfg):
+            """设置保存后回调"""
+            from config import save_config
+            self.cfg = new_cfg
+            save_config(new_cfg)
+            # 应用透明度
+            self.opacity = new_cfg.get("ui", {}).get("opacity", 0.95)
+            self.root.attributes("-alpha", self.opacity)
+            self._show_toast("设置已保存 ✓", 1500)
 
-        rx = self.root.winfo_x()
-        ry = self.root.winfo_y()
-        rw = self.root.winfo_width()
-        win.geometry(f"220x110+{rx + rw - 220}+{ry + 5}")
+        def _on_theme_change(theme_name):
+            """主题预览"""
+            self._apply_theme(theme_name)
 
-        try:
-            hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
-            pref = ctypes.c_int(2)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
-        except Exception:
-            pass
-
-        tk.Label(win, text="透明度", font=("Segoe UI", 9),
-                 bg=self.p.bg_tertiary, fg=self.p.text_primary).pack(pady=(8, 0))
-
-        var = tk.DoubleVar(value=self.opacity)
-
-        def on_slider(v):
-            self._set_opacity(float(v))
-            win.attributes("-alpha", float(v))
-
-        tk.Scale(
-            win, from_=0.1, to=0.9, resolution=0.1,
-            orient=tk.HORIZONTAL, variable=var, command=on_slider,
-            bg=self.p.bg_tertiary, fg=self.p.text_primary,
-            highlightthickness=0, troughcolor=self.p.bg_primary,
-            sliderrelief=tk.FLAT, length=190, showvalue=True,
-            bd=0, font=("Segoe UI", 8),
-        ).pack(padx=10, pady=(0, 4))
-
-        # Theme switcher
-        theme_frame = tk.Frame(win, bg=self.p.bg_tertiary)
-        theme_frame.pack(fill=tk.X, padx=10, pady=(0, 6))
-
-        themes = [("深色", "dark"), ("浅色", "light"), ("高对比", "high_contrast")]
-        current = self.sm.theme
-        for label, name in themes:
-            is_active = (name == current)
-            fg = self.p.accent_primary if is_active else self.p.text_tertiary
-            btn = tk.Label(
-                theme_frame, text=label, font=("Segoe UI", 9),
-                bg=self.p.bg_tertiary, fg=fg, cursor="hand2",
-                padx=6, pady=2,
-            )
-            btn.pack(side=tk.LEFT, expand=True)
-
-            def on_enter(e, b=btn, n=name):
-                if n != self.sm.theme:
-                    b.config(fg=self.p.text_primary)
-
-            def on_leave(e, b=btn, n=name, active=(name == current)):
-                if n != self.sm.theme:
-                    b.config(fg=self.p.text_tertiary)
-
-            def on_click(e, n=name):
-                self._apply_theme(n)
-                self._settings_win.destroy()
-                self._settings_win = None
-
-            btn.bind("<Enter>", on_enter)
-            btn.bind("<Leave>", on_leave)
-            btn.bind("<Button-1>", on_click)
-
-        def close_settings(e=None):
-            if self._settings_win:
-                self._settings_win.destroy()
-                self._settings_win = None
-
-        win.bind("<FocusOut>", close_settings)
-        win.focus_set()
+        panel = SettingsPanel(
+            parent=self.root,
+            config=self.cfg,
+            palette=self.p,
+            style_manager=self.sm,
+            on_save=_on_save,
+            on_theme_change=_on_theme_change,
+        )
+        self._settings_panel = panel
+        panel.show()
 
     def _set_opacity(self, value):
         self.opacity = value
@@ -781,9 +729,9 @@ class SpotlightUI:
         self.anim.fade_out(self.root, duration=100,
                            from_alpha=self.opacity, to_alpha=0.0,
                            on_complete=do_hide)
-        if self._settings_win:
-            self._settings_win.destroy()
-            self._settings_win = None
+        if self._settings_panel:
+            self._settings_panel._close()
+            self._settings_panel = None
 
     def toggle(self):
         if self._visible:
