@@ -68,7 +68,7 @@
 
 ### Phase 8: UI Enhancements ✅
 **Goal:** 界面更精致，交互更流畅
-**Status:** PLANNED
+**Status:** DONE
 
 - [x] 设置面板：可视化设置（不再手动编辑 JSON）
 - [x] 主题跟随系统：自动切换 dark/light
