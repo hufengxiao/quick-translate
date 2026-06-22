@@ -1238,7 +1238,53 @@ def test_collocations():
 test("Collocations", test_collocations)
 
 
-print(f"\nResults: {29 - len(errors)} passed / {len(errors)} failed")
+# 30. Auto-start registry management
+def test_autostart():
+    from src.utils.autostart import (
+        is_autostart_enabled, enable_autostart, disable_autostart, set_autostart,
+    )
+    import sys
+
+    if sys.platform != "win32":
+        # On non-Windows, all functions should return False/no-op
+        assert is_autostart_enabled() is False
+        assert enable_autostart() is False
+        assert disable_autostart() is False
+        assert set_autostart(True) is False
+        return
+
+    # Save current state
+    original = is_autostart_enabled()
+
+    # Test enable
+    result = enable_autostart()
+    assert result is True, "enable_autostart should return True on Windows"
+    assert is_autostart_enabled() is True, "should be enabled after enable_autostart"
+
+    # Test disable
+    result = disable_autostart()
+    assert result is True, "disable_autostart should return True on Windows"
+    assert is_autostart_enabled() is False, "should be disabled after disable_autostart"
+
+    # Test set_autostart toggle
+    set_autostart(True)
+    assert is_autostart_enabled() is True
+    set_autostart(False)
+    assert is_autostart_enabled() is False
+
+    # Disable again is idempotent
+    assert disable_autostart() is True
+    assert is_autostart_enabled() is False
+
+    # Restore original state
+    if original:
+        enable_autostart()
+
+
+test("Auto-start", test_autostart)
+
+
+print(f"\nResults: {30 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

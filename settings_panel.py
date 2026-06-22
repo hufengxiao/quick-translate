@@ -4,6 +4,7 @@
 """
 import tkinter as tk
 import ctypes
+from src.utils.autostart import set_autostart, is_autostart_enabled
 
 
 class SettingsPanel:
@@ -118,6 +119,7 @@ class SettingsPanel:
         self._build_hotkey_section()
         self._build_ai_section()
         self._build_clipboard_section()
+        self._build_autostart_section()
 
         # ── 底部按钮 ──
         btn_frame = tk.Frame(win, bg=self.p.bg_primary, height=44)
@@ -316,6 +318,27 @@ class SettingsPanel:
             bd=0, font=("Segoe UI", 9),
         ).pack(fill=tk.X)
 
+    def _build_autostart_section(self):
+        self._section_header("启动")
+
+        # 检测实际注册表状态
+        current_state = is_autostart_enabled()
+        autostart_var = tk.BooleanVar(value=current_state)
+        self._vars["autostart.enabled"] = autostart_var
+
+        cb = tk.Checkbutton(
+            self._content, text="开机自启动", variable=autostart_var,
+            font=("Segoe UI", 10), bg=self.p.bg_tertiary,
+            fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
+            activebackground=self.p.bg_tertiary,
+            activeforeground=self.p.accent_primary,
+        )
+        cb.pack(padx=16, pady=(0, 4), anchor="w")
+
+        tk.Label(self._content, text="开启后 Windows 启动时自动运行",
+                 font=("Segoe UI", 9), bg=self.p.bg_tertiary,
+                 fg=self.p.text_tertiary).pack(padx=16, pady=(0, 12), anchor="w")
+
     # ── 辅助组件 ──
 
     def _section_header(self, text):
@@ -400,6 +423,11 @@ class SettingsPanel:
         clip["monitor_enabled"] = self._vars["clipboard.monitor_enabled"].get()
         clip["min_length"] = self._vars["clipboard.min_length"].get()
 
+        # 开机自启
+        autostart_enabled = self._vars["autostart.enabled"].get()
+        self.cfg.setdefault("autostart", {})["enabled"] = autostart_enabled
+        set_autostart(autostart_enabled)
+
         if self.on_save:
             self.on_save(self.cfg)
 
@@ -421,6 +449,7 @@ class SettingsPanel:
         self._vars["ai.model"].set("mimo-v2.5")
         self._vars["clipboard.monitor_enabled"].set(False)
         self._vars["clipboard.min_length"].set(2)
+        self._vars["autostart.enabled"].set(False)
         if self.on_theme_change:
             self.on_theme_change("dark")
 

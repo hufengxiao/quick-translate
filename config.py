@@ -57,6 +57,9 @@ DEFAULT_CONFIG = {
         "monitor_enabled": False,
         "min_length": 2,
     },
+    "autostart": {
+        "enabled": False,
+    },
 }
 
 

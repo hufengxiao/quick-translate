@@ -127,12 +127,18 @@ class LoggingConfig:
 
 
 @dataclass
+class AutostartConfig:
+    enabled: bool = False
+
+
+@dataclass
 class AppConfig:
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     ai: AIConfig = field(default_factory=AIConfig)
     dictionary: DictionaryConfig = field(default_factory=DictionaryConfig)
     clipboard: ClipboardConfig = field(default_factory=ClipboardConfig)
+    autostart: AutostartConfig = field(default_factory=AutostartConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     window_position: dict = field(default_factory=dict)
 
@@ -194,6 +200,10 @@ def _dict_to_config(d: dict) -> AppConfig:
         for k, v in d["clipboard"].items():
             if hasattr(cfg.clipboard, k):
                 setattr(cfg.clipboard, k, v)
+    if "autostart" in d:
+        for k, v in d["autostart"].items():
+            if hasattr(cfg.autostart, k):
+                setattr(cfg.autostart, k, v)
     if "logging" in d:
         for k, v in d["logging"].items():
             if hasattr(cfg.logging, k):
