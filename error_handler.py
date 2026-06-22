@@ -99,8 +99,11 @@ def retry(max_attempts: int = 3, delay: float = 1.0,
 class ErrorHandler:
     """错误处理器"""
 
-    def __init__(self, show_toast: Optional[Callable] = None):
+    def __init__(self, show_toast: Optional[Callable] = None,
+                 crash_report_enabled: bool = True):
         self.show_toast = show_toast
+        self.crash_report_enabled = crash_report_enabled
+        self._last_report_path: Optional[str] = None
 
     def handle(self, error: Exception, context: str = ""):
         """处理错误"""
@@ -113,8 +116,59 @@ class ErrorHandler:
             f"{traceback.format_exc()}"
         )
 
+        # 自动保存崩溃报告（仅严重/非可恢复错误）
+        if self.crash_report_enabled and not getattr(error, 'recoverable', True):
+            self._save_crash_report(error, context)
+
         # 显示用户提示
         if self.show_toast:
             self.show_toast(f"⚠ {user_msg}", 3000)
 
         return error_type
+
+    def handle_crash(self, exc_type, exc_value, exc_tb, context: str = ""):
+        """处理未捕获异常，生成崩溃报告"""
+        error_type = classify_error(exc_value) if exc_value else ErrorType.UNKNOWN
+        user_msg = get_user_message(exc_value) if exc_value else "发生未知错误"
+
+        # 记录详细日志
+        logger.error(
+            f"[CRASH] [{error_type.value}] {context}: {exc_value}\n"
+            f"{''.join(traceback.format_exception(exc_type, exc_value, exc_tb))}"
+        )
+
+        # 自动保存崩溃报告
+        if self.crash_report_enabled:
+            try:
+                from src.utils.crash_report import collect_and_save
+                report_path = collect_and_save(
+                    exc_type, exc_value,
+                    context=context or "uncaught_exception",
+                )
+                self._last_report_path = str(report_path)
+                logger.error(f"Crash report saved to: {report_path}")
+            except Exception as report_err:
+                logger.error(f"Failed to save crash report: {report_err}")
+
+        # 显示用户提示
+        if self.show_toast:
+            self.show_toast(f"⚠ {user_msg}", 5000)
+
+        return error_type
+
+    def _save_crash_report(self, error: Exception, context: str = ""):
+        """为严重错误自动保存崩溃报告"""
+        try:
+            from src.utils.crash_report import collect_and_save
+            report_path = collect_and_save(
+                context=context,
+                extra={"error_type": classify_error(error).value},
+            )
+            self._last_report_path = str(report_path)
+        except Exception as report_err:
+            logger.error(f"Failed to save crash report: {report_err}")
+
+    @property
+    def last_report_path(self) -> Optional[str]:
+        """返回最近一次崩溃报告的路径"""
+        return self._last_report_path

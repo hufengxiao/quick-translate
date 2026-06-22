@@ -1421,7 +1421,82 @@ def test_i18n():
 test("I18n", test_i18n)
 
 
-print(f"\nResults: {34 - len(errors)} passed / {len(errors)} failed")
+# 35. Crash Report
+def test_crash_report():
+    from src.utils.crash_report import (
+        generate_crash_report, save_crash_report, get_report_dir,
+        list_reports, collect_and_save, _collect_system_info, _tail_log_file,
+    )
+    import tempfile, json, shutil
+
+    # 1. System info collection
+    info = _collect_system_info()
+    assert "platform" in info, f"Missing 'platform' in system info: {info}"
+    assert "python_version" in info
+    assert "os_name" in info
+
+    # 2. Log tail (may be empty if no log file exists, that's fine)
+    tail = _tail_log_file(max_lines=10)
+    assert isinstance(tail, list)
+
+    # 3. Generate report with explicit exception
+    try:
+        raise ValueError("test crash error 42")
+    except ValueError:
+        report = generate_crash_report(context="unit_test")
+
+    assert report["app"] == "QuickTranslate"
+    assert "timestamp" in report
+    assert report["context"] == "unit_test"
+    assert report["error"]["type"] == "ValueError"
+    assert "test crash error 42" in report["error"]["message"]
+    assert "ValueError" in report["traceback"]
+    assert "system" in report
+
+    # 4. Save report to temp dir and verify file exists
+    tmpdir = tempfile.mkdtemp()
+    try:
+        # Monkey-patch _REPORT_DIR for this test
+        import src.utils.crash_report as cr_mod
+        orig_dir = cr_mod._REPORT_DIR
+        cr_mod._REPORT_DIR = __import__("pathlib").Path(tmpdir) / "crash_reports"
+
+        saved = save_crash_report(report)
+        assert saved.exists(), f"Report file not found: {saved}"
+        assert saved.suffix == ".json"
+        assert "crash_" in saved.name
+
+        # Read back and verify JSON structure
+        loaded = json.loads(saved.read_text(encoding="utf-8"))
+        assert loaded["app"] == "QuickTranslate"
+        assert loaded["error"]["type"] == "ValueError"
+
+        # 5. collect_and_save convenience function
+        try:
+            raise RuntimeError("convenience test")
+        except RuntimeError:
+            path2 = collect_and_save(context="convenience_test")
+        assert path2.exists()
+        loaded2 = json.loads(path2.read_text(encoding="utf-8"))
+        assert loaded2["context"] == "convenience_test"
+        assert loaded2["error"]["type"] == "RuntimeError"
+
+        # 6. list_reports
+        reports = list_reports(limit=5)
+        assert len(reports) >= 2, f"Expected >=2 reports, got {len(reports)}"
+
+        # 7. get_report_dir
+        assert get_report_dir() == cr_mod._REPORT_DIR
+
+        cr_mod._REPORT_DIR = orig_dir
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+test("Crash Report", test_crash_report)
+
+
+print(f"\nResults: {35 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

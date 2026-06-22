@@ -300,6 +300,13 @@ def main():
         pass
     except Exception as e:
         logger.error(f"未捕获异常: {e}", exc_info=True)
+        # 自动保存崩溃报告
+        try:
+            from src.utils.crash_report import collect_and_save
+            report_path = collect_and_save(context="main_uncaught")
+            logger.error(f"Crash report saved to: {report_path}")
+        except Exception:
+            pass
     finally:
         if clipboard_monitor:
             clipboard_monitor.stop()
