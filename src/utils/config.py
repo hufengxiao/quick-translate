@@ -54,6 +54,17 @@ class UIConfig:
 
 
 @dataclass
+class AIProvider:
+    """A single AI provider configuration."""
+    name: str = ""
+    api_base: str = ""
+    api_key: str = ""
+    model: str = ""
+    priority: int = 10
+    enabled: bool = True
+
+
+@dataclass
 class AIConfig:
     enabled: bool = True
     api_base: str = "https://token-plan-cn.xiaomimimo.com/v1"
@@ -72,6 +83,26 @@ class AIConfig:
         "When the user inputs a sentence, translate it fluently and explain key grammar points.\n"
         "Always be thorough and helpful. Use Chinese for explanations."
     )
+    providers: list = field(default_factory=list)
+    auto_switch: bool = True
+
+    def get_active_providers(self) -> list:
+        """Return enabled providers sorted by priority, falling back to legacy fields."""
+        if self.providers:
+            return sorted(
+                [p for p in self.providers if p.enabled],
+                key=lambda p: p.priority,
+            )
+        # Legacy single-provider fallback
+        if self.api_base and self.model:
+            return [AIProvider(
+                name="default",
+                api_base=self.api_base,
+                api_key=self.api_key,
+                model=self.model,
+                priority=1,
+            )]
+        return []
 
 
 @dataclass
@@ -148,7 +179,12 @@ def _dict_to_config(d: dict) -> AppConfig:
                 setattr(cfg.ui, k, v)
     if "ai" in d:
         for k, v in d["ai"].items():
-            if hasattr(cfg.ai, k):
+            if k == "providers" and isinstance(v, list):
+                cfg.ai.providers = [
+                    AIProvider(**p) if isinstance(p, dict) else p
+                    for p in v
+                ]
+            elif hasattr(cfg.ai, k):
                 setattr(cfg.ai, k, v)
     if "dictionary" in d:
         for k, v in d["dictionary"].items():

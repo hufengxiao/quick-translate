@@ -99,7 +99,7 @@ def main():
     from config import load_config, save_config
     from hotkey import HotkeyListener
     from dictionary import Dictionary
-    from translator import AITranslator
+    from translator import AITranslator, MultiAITranslator
     from history import SearchHistory
     from vocabulary import VocabularyBook
     from stats import SearchStats
@@ -139,15 +139,24 @@ def main():
     dictionary = Dictionary(dict_path, mdx_dict=mdx_dict)
     logger.info(f"词典加载完成: {dictionary.word_count:,} 词条")
 
-    # AI 翻译
-    ai = AITranslator(
-        api_base=cfg["ai"]["api_base"],
-        api_key=cfg["ai"]["api_key"],
-        model=cfg["ai"]["model"],
-        system_prompt=cfg["ai"]["system_prompt"],
-    )
+    # AI 翻译 — 支持多模型自动切换
+    providers = cfg["ai"].get("providers", [])
+    if providers:
+        ai = MultiAITranslator(
+            providers=providers,
+            system_prompt=cfg["ai"]["system_prompt"],
+            auto_switch=cfg["ai"].get("auto_switch", True),
+        )
+    else:
+        ai = AITranslator(
+            api_base=cfg["ai"]["api_base"],
+            api_key=cfg["ai"]["api_key"],
+            model=cfg["ai"]["model"],
+            system_prompt=cfg["ai"]["system_prompt"],
+        )
     if ai.is_configured:
-        logger.info(f"AI 翻译: {cfg['ai']['model']}")
+        names = ai.get_provider_names() if hasattr(ai, "get_provider_names") else [cfg["ai"]["model"]]
+        logger.info(f"AI 翻译: {', '.join(names)}")
 
     # 查词历史
     history = SearchHistory(max_size=50)

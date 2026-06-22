@@ -764,7 +764,73 @@ def test_monitor_clamp():
 test("Multi-Monitor", test_monitor_clamp)
 
 
-print(f"\nResults: {23 - len(errors)} passed / {len(errors)} failed")
+# 24. Multi AI Translator
+def test_multi_translator():
+    from translator import AITranslator, MultiAITranslator
+    from src.utils.config import AIProvider, AIConfig
+
+    # Single provider (backward compat)
+    ai = AITranslator("http://localhost", "k", "m", "p")
+    assert ai.is_configured
+    assert ai.name == "m"
+
+    # MultiAITranslator with no providers should not be configured
+    multi = MultiAITranslator(providers=[], system_prompt="test")
+    assert not multi.is_configured
+    assert multi.provider_count == 0
+
+    # MultiAITranslator with providers
+    p1 = AIProvider(name="test1", api_base="http://localhost:1", api_key="k1", model="m1", priority=1)
+    p2 = AIProvider(name="test2", api_base="http://localhost:2", api_key="k2", model="m2", priority=2)
+    multi2 = MultiAITranslator(providers=[p1, p2], system_prompt="test")
+    assert multi2.is_configured
+    assert multi2.provider_count == 2
+    assert multi2.get_provider_names() == ["test1", "test2"]
+    assert multi2.current_provider_name == "test1"
+
+    # Disabled provider should be excluded
+    p3 = AIProvider(name="disabled", api_base="http://localhost:3", api_key="k3", model="m3", enabled=False)
+    multi3 = MultiAITranslator(providers=[p1, p3], system_prompt="test")
+    assert multi3.provider_count == 1
+    assert multi3.get_provider_names() == ["test1"]
+
+    # get_active_providers with explicit providers
+    cfg = AIConfig()
+    cfg.providers = [p1, p2]
+    active = cfg.get_active_providers()
+    assert len(active) == 2
+    assert active[0].name == "test1"  # lower priority number first
+    assert active[1].name == "test2"
+
+    # get_active_providers legacy fallback (no providers, uses api_base)
+    cfg2 = AIConfig(api_base="http://test", api_key="k", model="m")
+    active2 = cfg2.get_active_providers()
+    assert len(active2) == 1
+    assert active2[0].name == "default"
+    assert active2[0].api_base == "http://test"
+
+    # get_active_providers with empty everything
+    cfg3 = AIConfig(api_base="", api_key="", model="")
+    cfg3.providers = []
+    active3 = cfg3.get_active_providers()
+    assert len(active3) == 0
+
+    # Config dict with providers
+    from src.utils.config import _dict_to_config
+    d = {"ai": {"providers": [
+        {"name": "a", "api_base": "http://a", "api_key": "ka", "model": "ma", "priority": 2},
+        {"name": "b", "api_base": "http://b", "api_key": "kb", "model": "mb", "priority": 1},
+    ], "auto_switch": False}}
+    cfg4 = _dict_to_config(d)
+    assert len(cfg4.ai.providers) == 2
+    assert cfg4.ai.providers[0].name == "a"
+    assert cfg4.ai.auto_switch is False
+
+
+test("Multi AI Translator", test_multi_translator)
+
+
+print(f"\nResults: {24 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

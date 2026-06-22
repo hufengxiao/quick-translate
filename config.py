@@ -27,6 +27,8 @@ DEFAULT_CONFIG = {
         "api_base": "https://token-plan-cn.xiaomimimo.com/v1",
         "api_key": "tp-cr6615u5dv567yf4rrh1jti1cffpjuqrzvrqffru364ori7d",
         "model": "mimo-v2.5",
+        "providers": [],
+        "auto_switch": True,
         "system_prompt": (
             "You are a professional English-Chinese dictionary assistant. "
             "When the user inputs a single English word, provide a detailed dictionary entry in this format:\n"
