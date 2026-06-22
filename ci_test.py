@@ -259,6 +259,66 @@ def test_pinyin_search():
     assert d.search_pinyin("123") == []
 
 
+# 16. Relevance sorting: exact > prefix > contains
+def test_relevance_sorting():
+    from src.core.index.exact import ExactIndex
+    from src.core.index.trie import TrieIndex
+    from src.core.index.bktree import BKTree
+    from src.core.index.router import QueryRouter
+    from src.core.cache.lru import LRUCache
+
+    exact = ExactIndex()
+    trie = TrieIndex()
+    cache = LRUCache(100)
+
+    data = {
+        "hello": "greeting",
+        "helpful": "adj.useful",
+        "helicopter": "n.flying machine",
+        "shell": "n.covering",
+        "othello": "n.play",
+    }
+    exact.load(data)
+    trie.load(data)
+    router = QueryRouter(
+        exact=exact, trie=trie, cache=cache,
+        bktree=BKTree(), pinyin_index=None,
+        sorted_keys=sorted(data.keys()), raw_dict=data,
+    )
+
+    # Search "hello" — exact match should be first with match_type="exact"
+    results = router.search("hello", limit=20)
+    assert len(results) > 0, "No results for 'hello'"
+    assert results[0]["word"] == "hello", f"Expected 'hello' first, got '{results[0]['word']}'"
+    assert results[0]["match_type"] == "exact", f"Expected exact, got {results[0].get('match_type')}"
+
+    # All results should have match_type
+    for r in results:
+        assert "match_type" in r, f"Missing match_type in result: {r}"
+
+    # Search "hel" — prefix matches should all come before contains matches
+    results2 = router.search("hel", limit=20)
+    types = [r["match_type"] for r in results2]
+    # exact first (if any), then prefix, then contains
+    prefix_idx = next((i for i, t in enumerate(types) if t == "prefix"), len(types))
+    contains_idx = next((i for i, t in enumerate(types) if t == "contains"), len(types))
+    assert prefix_idx <= contains_idx, f"prefix({prefix_idx}) should come before contains({contains_idx}): {types}"
+
+    # Contains-only search: "hello" appears in "othello" via contains
+    results3 = router.search("hell", limit=20)
+    types3 = [r["match_type"] for r in results3]
+    # prefix matches (hello, helpful, helicopter) should come before contains (othello, shell)
+    has_prefix = any(t == "prefix" for t in types3)
+    has_contains = any(t == "contains" for t in types3)
+    if has_prefix and has_contains:
+        last_prefix = max(i for i, t in enumerate(types3) if t == "prefix")
+        first_contains = min(i for i, t in enumerate(types3) if t == "contains")
+        assert last_prefix < first_contains, \
+            f"prefix results should come before contains: {list(zip(types3, [r['word'] for r in results3]))}"
+
+    print("  PASS Relevance Sorting (via query)")
+
+
 print("Running tests...")
 test("Config", test_config)
 test("Errors", test_errors)
@@ -275,6 +335,7 @@ test("Clipboard Monitor", test_clipboard)
 test("Config Clipboard", test_config_clipboard)
 test("MDX Path Config", test_mdx_path_config)
 test("Pinyin Search", test_pinyin_search)
+test("Relevance Sorting", test_relevance_sorting)
 
 
 # 14. Startup benchmark
@@ -320,7 +381,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {17 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {18 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

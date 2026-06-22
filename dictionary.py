@@ -189,6 +189,7 @@ class Dictionary:
                     "definition": entry["definition"],
                     "phonetic": entry.get("phonetic", ""),
                     "text": entry.get("text", ""),
+                    "match_type": "exact",
                 })
 
         # MDX prefix match
@@ -197,6 +198,7 @@ class Dictionary:
             seen = {r["word"] for r in results}
             for r in mdx_results:
                 if r["word"] not in seen:
+                    r["match_type"] = "prefix"
                     results.append(r)
                     seen.add(r["word"])
                     if len(results) >= limit:
@@ -205,13 +207,13 @@ class Dictionary:
         # JSON fallback — bisect
         if not results:
             if query_lower in self.entries:
-                results.append({"word": query_lower, "definition": self.entries[query_lower]})
+                results.append({"word": query_lower, "definition": self.entries[query_lower], "match_type": "exact"})
             # Prefix via bisect
             idx = bisect.bisect_left(self.sorted_keys, query_lower)
             while idx < len(self.sorted_keys) and len(results) < limit:
                 key = self.sorted_keys[idx]
                 if key.startswith(query_lower) and key != query_lower:
-                    results.append({"word": key, "definition": self.entries[key]})
+                    results.append({"word": key, "definition": self.entries[key], "match_type": "prefix"})
                 elif not key.startswith(query_lower):
                     break
                 idx += 1
@@ -220,7 +222,7 @@ class Dictionary:
                 seen = {r["word"] for r in results}
                 for key in self.sorted_keys:
                     if query_lower in key and key not in seen and not key.startswith(query_lower):
-                        results.append({"word": key, "definition": self.entries[key]})
+                        results.append({"word": key, "definition": self.entries[key], "match_type": "contains"})
                         seen.add(key)
                         if len(results) >= limit:
                             break
@@ -229,6 +231,8 @@ class Dictionary:
         if not results:
             spell_results = self.search_spell(query_lower, tolerance=2, limit=5)
             if spell_results:
+                for r in spell_results:
+                    r["match_type"] = "fuzzy"
                 results = spell_results
 
         # 拼音搜索：当 query 为纯字母时，追加拼音匹配结果
@@ -238,8 +242,13 @@ class Dictionary:
                 seen = {r["word"] for r in results}
                 for r in pinyin_results:
                     if r["word"] not in seen:
+                        r["match_type"] = "pinyin"
                         results.append(r)
                         seen.add(r["word"])
+
+        # 按相关度排序：exact > prefix > fuzzy > pinyin > contains
+        _score = {"exact": 0, "prefix": 1, "fuzzy": 2, "pinyin": 3, "contains": 4}
+        results.sort(key=lambda r: _score.get(r.get("match_type", "contains"), 99))
 
         # 缓存
         if len(self._cache) >= self._cache_max:

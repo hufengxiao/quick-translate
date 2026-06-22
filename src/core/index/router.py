@@ -30,8 +30,20 @@ class QueryRouter:
         self._sorted_keys = sorted_keys or []
         self._raw = raw_dict or {}
 
+    # Relevance scores: lower = more relevant
+    _SCORE = {
+        "exact": 0,
+        "prefix": 1,
+        "fuzzy": 2,
+        "pinyin": 3,
+        "contains": 4,
+    }
+
     def search(self, query: str, limit: int = 20) -> List[Dict[str, str]]:
-        """Search with cascading fallback: cache -> exact -> prefix -> fuzzy -> pinyin -> contains."""
+        """Search with cascading fallback: cache -> exact -> prefix -> fuzzy -> pinyin -> contains.
+        Results are tagged with match_type and sorted by relevance:
+        exact > prefix > fuzzy > pinyin > contains.
+        """
         if not query:
             return []
 
@@ -49,7 +61,7 @@ class QueryRouter:
         # 2. Exact match (always first)
         exact_def = self._exact.lookup(q)
         if exact_def is not None:
-            results.append({"word": q, "definition": exact_def})
+            results.append({"word": q, "definition": exact_def, "match_type": "exact"})
 
         # 3. Prefix match via Trie
         if len(results) < limit:
@@ -57,6 +69,7 @@ class QueryRouter:
             seen = {r["word"] for r in results}
             for r in prefix_results:
                 if r["word"] not in seen:
+                    r["match_type"] = "prefix"
                     results.append(r)
                     seen.add(r["word"])
                     if len(results) >= limit:
@@ -69,6 +82,7 @@ class QueryRouter:
             seen = {r["word"] for r in results}
             for r in fuzzy_results:
                 if r["word"] not in seen:
+                    r["match_type"] = "fuzzy"
                     results.append(r)
                     seen.add(r["word"])
                     if len(results) >= limit:
@@ -80,6 +94,7 @@ class QueryRouter:
             seen = {r["word"] for r in results}
             for r in pinyin_results:
                 if r["word"] not in seen:
+                    r["match_type"] = "pinyin"
                     results.append(r)
                     seen.add(r["word"])
                     if len(results) >= limit:
@@ -90,10 +105,13 @@ class QueryRouter:
             seen = {r["word"] for r in results}
             for key in self._sorted_keys:
                 if q in key and key not in seen and not key.startswith(q):
-                    results.append({"word": key, "definition": self._raw[key]})
+                    results.append({"word": key, "definition": self._raw[key], "match_type": "contains"})
                     seen.add(key)
                     if len(results) >= limit:
                         break
+
+        # Sort by relevance: exact > prefix > fuzzy > pinyin > contains
+        results.sort(key=lambda r: self._SCORE.get(r.get("match_type", "contains"), 99))
 
         # Cache and return
         if results:
