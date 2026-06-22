@@ -53,7 +53,7 @@
 - [x] 拼写纠错：输入 "helllo" 自动建议 "hello"（编辑距离 ≤ 2）
 - [x] 搜索历史优先：输入时优先显示历史查过的词
 - [x] 模糊拼音搜索：输入拼音 "nihao" 能找到 "你好"
-- [ ] 搜索结果按相关度排序（exact > prefix > contains）
+- [x] 搜索结果按相关度排序（exact > prefix > contains）
 - [ ] 候选列表显示词性标签（n. v. adj.）
 
 ### Phase 7: Word Management
