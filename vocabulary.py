@@ -36,12 +36,16 @@ class VocabularyBook:
         word = word.strip()
         if not word:
             return
-        # 如果已存在，先移除再重新添加（刷新时间）
+        # 如果已存在，保留其星标状态，先移除再重新添加（刷新时间）
+        existing_starred = any(
+            e.get("word") == word and e.get("starred") for e in self.entries
+        )
         self.entries = [e for e in self.entries if e.get("word") != word]
         self.entries.insert(0, {
             "word": word,
             "definition": definition.split("\n")[0][:120],
             "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "starred": existing_starred,
         })
         self.entries = self.entries[:self.max_size]
         self._save()
@@ -68,9 +72,29 @@ class VocabularyBook:
             self.add(word, definition)
             return True
 
+    def toggle_star(self, word: str) -> bool:
+        """切换星标状态。返回 True 表示已星标，False 表示已取消星标。
+
+        单词必须已在生词本中才能加星标。
+        """
+        word = word.strip()
+        for e in self.entries:
+            if e.get("word") == word:
+                e["starred"] = not e.get("starred", False)
+                self._save()
+                return e["starred"]
+        return False
+
+    def is_starred(self, word: str) -> bool:
+        """检查单词是否已星标"""
+        word = word.strip()
+        return any(e.get("word") == word and e.get("starred") for e in self.entries)
+
     def get_all(self, limit: int = 100) -> list:
-        """获取所有收藏的单词"""
-        return self.entries[:limit]
+        """获取所有收藏的单词（星标词汇置顶）"""
+        starred = [e for e in self.entries if e.get("starred")]
+        unstarred = [e for e in self.entries if not e.get("starred")]
+        return (starred + unstarred)[:limit]
 
     def clear(self):
         """清空生词本"""
@@ -78,9 +102,12 @@ class VocabularyBook:
         self._save()
 
     def search(self, query: str, limit: int = 10) -> list:
-        """在生词本中搜索"""
+        """在生词本中搜索（星标词汇置顶）"""
         q = query.lower()
-        return [e for e in self.entries if q in e.get("word", "").lower()][:limit]
+        results = [e for e in self.entries if q in e.get("word", "").lower()]
+        starred = [e for e in results if e.get("starred")]
+        unstarred = [e for e in results if not e.get("starred")]
+        return (starred + unstarred)[:limit]
 
     def export_csv(self) -> str:
         """导出为 CSV 格式字符串"""

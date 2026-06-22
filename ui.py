@@ -444,6 +444,18 @@ class SpotlightUI:
                 self.def_title.cget("text"))) else p.text_tertiary))
         self._current_detail_word = ""
 
+        # 星标按钮
+        self._star_btn = tk.Label(
+            self._title_row, text="◇", font=("Segoe UI Emoji", 14),
+            bg=p.bg_primary, fg=p.text_tertiary, cursor="hand2", padx=4,
+        )
+        self._star_btn.pack(side=tk.RIGHT)
+        self._star_btn.bind("<Button-1>", self._on_toggle_star)
+        self._star_btn.bind("<Enter>", lambda e: self._star_btn.config(fg="#FFD700"))
+        self._star_btn.bind("<Leave>", lambda e: self._star_btn.config(
+            fg="#FFD700" if (self.vocabulary and self.vocabulary.is_starred(
+                self._current_detail_word)) else p.text_tertiary))
+
         self.def_text = tk.Text(
             self._def_frame, font=s.get_font('result_body'),
             bg=p.bg_primary, fg=p.text_primary,
@@ -543,11 +555,15 @@ class SpotlightUI:
             defn = m.get("definition", "").split("\n")[0]
             if len(defn) > 22:
                 defn = defn[:22] + "…"
+            # 星标词汇显示 ◆ 标记
+            star_mark = ""
+            if self.vocabulary and self.vocabulary.is_starred(word):
+                star_mark = "◆ "
             pos_display = f"  {pos}" if pos else ""
             if phon:
-                self.listbox.insert(tk.END, f"  {word}{pos_display}  {phon}  {defn}")
+                self.listbox.insert(tk.END, f"  {star_mark}{word}{pos_display}  {phon}  {defn}")
             else:
-                self.listbox.insert(tk.END, f"  {word}{pos_display}  {defn}")
+                self.listbox.insert(tk.END, f"  {star_mark}{word}{pos_display}  {defn}")
 
         # 自动选中第一项（但不显示详情，保持列表模式）
         self.listbox.selection_set(0)
@@ -611,6 +627,7 @@ class SpotlightUI:
         self._show_detail_mode()
         self._current_detail_word = query
         self._update_fav_button()
+        self._update_star_button()
         self.on_translate(query, self._on_ai_result, self._on_ai_error)
 
     def _on_ai_result(self, text: str):
@@ -656,6 +673,7 @@ class SpotlightUI:
             self._show_detail_mode()  # 切换到详情面板
             self._current_detail_word = word
             self._update_fav_button()
+            self._update_star_button()
             if record_history and self.history:
                 self.history.add(word, m.get("definition", "")[:80])
 
@@ -677,10 +695,38 @@ class SpotlightUI:
         content = self.def_text.get("1.0", tk.END).strip()
         now_fav = self.vocabulary.toggle(word, content)
         self._update_fav_button()
+        self._update_star_button()
         if now_fav:
             self._show_toast(f"已收藏 \"{word}\" ★", 1500)
         else:
             self._show_toast(f"已取消收藏 \"{word}\"", 1500)
+
+    def _on_toggle_star(self, event=None):
+        """Toggle star status for the current word."""
+        if not self.vocabulary or not self._current_detail_word:
+            return
+        word = self._current_detail_word
+        if not self.vocabulary.is_favorited(word):
+            # 先收藏，再加星标
+            content = self.def_text.get("1.0", tk.END).strip()
+            self.vocabulary.add(word, content)
+        now_starred = self.vocabulary.toggle_star(word)
+        self._update_fav_button()
+        self._update_star_button()
+        if now_starred:
+            self._show_toast(f"已星标 \"{word}\" ◆", 1500)
+        else:
+            self._show_toast(f"已取消星标 \"{word}\"", 1500)
+
+    def _update_star_button(self):
+        """Update the star button appearance based on current word."""
+        if not self.vocabulary:
+            return
+        word = self._current_detail_word
+        if word and self.vocabulary.is_starred(word):
+            self._star_btn.config(text="◆", fg="#FFD700")
+        else:
+            self._star_btn.config(text="◇", fg=self.p.text_tertiary)
 
     def _set_definition(self, title: str, content: str):
         self.def_title.config(text=title)

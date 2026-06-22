@@ -520,6 +520,90 @@ def test_vocabulary_review():
 test("Vocabulary Review", test_vocabulary_review)
 
 
+# 20. Vocabulary Star (星标词汇)
+def test_vocabulary_star():
+    from vocabulary import VocabularyBook
+    import tempfile, os
+    tmpdir = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdir, "vocabulary.json")
+    vb = VocabularyBook.__new__(VocabularyBook)
+    vb.max_size = 500
+    vb.entries = []
+    vb.file_path = tmpfile
+
+    # Add some words
+    vb.add("hello", "你好")
+    vb.add("world", "世界")
+    vb.add("apple", "苹果")
+    vb.add("banana", "香蕉")
+
+    # Initially none starred
+    assert vb.is_starred("hello") is False
+    assert vb.is_starred("world") is False
+
+    # Star a word
+    result = vb.toggle_star("hello")
+    assert result is True
+    assert vb.is_starred("hello") is True
+
+    # Star another word
+    vb.toggle_star("apple")
+    assert vb.is_starred("apple") is True
+
+    # get_all should return starred words first
+    all_words = vb.get_all()
+    # Starred items come first (apple was added after hello, so apple appears first in entries)
+    starred_words = [w["word"] for w in all_words if w.get("starred")]
+    unstarred_words = [w["word"] for w in all_words if not w.get("starred")]
+    assert "hello" in starred_words
+    assert "apple" in starred_words
+    assert len(starred_words) == 2
+    # Starred come before unstarred
+    first_unstarred_idx = next(i for i, w in enumerate(all_words) if not w.get("starred"))
+    for i in range(first_unstarred_idx):
+        assert all_words[i].get("starred"), f"Word at {i} should be starred"
+    assert "world" in unstarred_words
+    assert "banana" in unstarred_words
+
+    # search should return starred words first
+    search_results = vb.search("a")
+    starred_in_search = [r for r in search_results if r.get("starred")]
+    unstarred_in_search = [r for r in search_results if not r.get("starred")]
+    # apple should be before banana (starred first)
+    words_in_order = [r["word"] for r in search_results]
+    if "apple" in words_in_order and "banana" in words_in_order:
+        assert words_in_order.index("apple") < words_in_order.index("banana")
+
+    # Unstar
+    result = vb.toggle_star("hello")
+    assert result is False
+    assert vb.is_starred("hello") is False
+
+    # Starring a word not in vocab should return False
+    assert vb.toggle_star("nonexistent") is False
+
+    # Star should persist across add (re-add same word)
+    vb.toggle_star("world")  # star world
+    assert vb.is_starred("world") is True
+    vb.add("world", "世界 updated")  # re-add
+    assert vb.is_starred("world") is True  # star should persist
+
+    # Export CSV should still work (backward compatible)
+    csv_content = vb.export_csv()
+    assert "Word,Definition,Added" in csv_content
+    assert "hello" in csv_content
+
+    # Verify entries have starred field
+    for entry in vb.entries:
+        assert "starred" in entry
+
+    import shutil
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+test("Vocabulary Star", test_vocabulary_star)
+
+
 # 14. Startup benchmark
 def test_startup():
     import subprocess
@@ -563,7 +647,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {20 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {21 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
