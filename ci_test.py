@@ -1007,7 +1007,90 @@ def test_translation_history():
 test("Translation History", test_translation_history)
 
 
-print(f"\nResults: {26 - len(errors)} passed / {len(errors)} failed")
+# 27. Word Root Analysis (词根分析)
+def test_word_root():
+    from word_root import analyze_word, format_analysis, PREFIXES, SUFFIXES, ROOTS
+
+    # Basic prefix detection
+    r = analyze_word("unhappy")
+    assert r["prefix"] is not None, f"Should detect prefix 'un-' in 'unhappy': {r}"
+    assert r["prefix"]["str"] == "un-", f"Expected 'un-', got {r['prefix']['str']}"
+
+    # Suffix detection
+    r2 = analyze_word("happiness")
+    assert r2["suffix"] is not None, f"Should detect suffix in 'happiness': {r2}"
+    assert "-ness" == r2["suffix"]["str"], f"Expected '-ness', got {r2['suffix']['str']}"
+
+    # Root detection
+    r3 = analyze_word("transport")
+    assert r3["root"] is not None, f"Should detect root in 'transport': {r3}"
+    assert r3["root"]["str"] == "port", f"Expected root 'port', got {r3['root']['str']}"
+    assert "携带" in r3["root"]["meaning"], f"Root meaning should contain '携带': {r3['root']['meaning']}"
+
+    # Combined: prefix + root + suffix
+    r4 = analyze_word("uncomfortable")
+    assert r4["prefix"] is not None, f"Should detect prefix in 'uncomfortable': {r4}"
+    assert r4["suffix"] is not None, f"Should detect suffix in 'uncomfortable': {r4}"
+    assert r4["prefix"]["str"] == "un-"
+    assert "-able" == r4["suffix"]["str"]
+    assert len(r4["parts"]) >= 2, f"Should have at least 2 parts: {r4['parts']}"
+
+    # Prefix + root: "export" (ex- + port)
+    r5 = analyze_word("export")
+    assert r5["prefix"] is not None, f"Should detect prefix in 'export': {r5}"
+    assert r5["prefix"]["str"] == "ex-"
+    assert r5["root"] is not None, f"Should detect root 'port' in 'export': {r5}"
+    assert r5["root"]["str"] == "port"
+
+    # Suffix only: "careful"
+    r6 = analyze_word("careful")
+    assert r6["suffix"] is not None, f"Should detect suffix in 'careful': {r6}"
+    assert "-ful" == r6["suffix"]["str"]
+
+    # Empty / non-alpha should return no parts
+    r7 = analyze_word("")
+    assert r7["parts"] == []
+    r8 = analyze_word("123")
+    assert r8["parts"] == []
+
+    # Short words (< 4 chars) should have no analysis
+    r9 = analyze_word("cat")
+    assert r9["parts"] == [], f"Short word 'cat' should have no parts: {r9['parts']}"
+
+    # format_analysis returns non-empty for analyzable words
+    fmt = format_analysis("unhappy")
+    assert len(fmt) > 0, f"format_analysis('unhappy') should be non-empty"
+    assert "un-" in fmt, f"Should contain prefix: {fmt}"
+
+    # format_analysis returns empty for non-analyzable words
+    fmt2 = format_analysis("cat")
+    assert fmt2 == "", f"format_analysis('cat') should be empty: '{fmt2}'"
+
+    # Database sanity checks
+    assert len(PREFIXES) >= 40, f"Expected >= 40 prefixes, got {len(PREFIXES)}"
+    assert len(SUFFIXES) >= 30, f"Expected >= 30 suffixes, got {len(SUFFIXES)}"
+    assert len(ROOTS) >= 80, f"Expected >= 80 roots, got {len(ROOTS)}"
+
+    # "construction" should detect root "struct"
+    r10 = analyze_word("construction")
+    assert r10["root"] is not None, f"Should detect root in 'construction': {r10}"
+    assert r10["root"]["str"] == "struct"
+
+    # "invisible" — in- prefix + vis root
+    r11 = analyze_word("invisible")
+    assert r11["prefix"] is not None, f"Should detect prefix in 'invisible': {r11}"
+    assert r11["root"] is not None, f"Should detect root in 'invisible': {r11}"
+    assert "vis" == r11["root"]["str"]
+
+    # "beautiful" — -ful suffix
+    r12 = analyze_word("beautiful")
+    assert r12["suffix"] is not None, f"Should detect suffix in 'beautiful': {r12}"
+
+
+test("Word Root Analysis", test_word_root)
+
+
+print(f"\nResults: {27 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
