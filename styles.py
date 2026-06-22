@@ -224,7 +224,7 @@ class StyleManager:
         'high_contrast': HIGH_CONTRAST_PALETTE,
     }
 
-    def __init__(self, theme: str = 'dark'):
+    def __init__(self, theme: str = 'dark', font_size: int = 13):
         self._theme = self._resolve_theme(theme)
         self.spacing = Spacing()
         self.radius = Radius()
@@ -235,6 +235,8 @@ class StyleManager:
             fallback='Microsoft YaHei',
             mono='Consolas',
         )
+        # Font size delta from default base (13). Positive = larger.
+        self._font_size_delta = font_size - 13
 
     @staticmethod
     def _resolve_theme(theme: str) -> str:
@@ -259,8 +261,9 @@ class StyleManager:
         object.__setattr__(self, '_theme', resolved)
 
     def get_font(self, size_key: str, weight: str = 'normal') -> tuple:
-        """获取 tkinter 字体元组"""
+        """获取 tkinter 字体元组（应用全局字体大小偏移）"""
         size = self.fonts.sizes.get(size_key, 12)
+        size = max(8, size + self._font_size_delta)
         if weight == 'bold':
             return (self.fonts.family, size, 'bold')
         return (self.fonts.family, size)

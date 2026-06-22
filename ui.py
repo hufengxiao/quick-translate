@@ -74,7 +74,8 @@ class SpotlightUI:
 
         # 设计系统
         theme_name = config.get("ui", {}).get("theme", "dark")
-        self.sm = StyleManager(theme_name)
+        font_size = config.get("ui", {}).get("font_size", 13)
+        self.sm = StyleManager(theme_name, font_size=font_size)
         self.p = self.sm.palette
 
         self.opacity = config["ui"]["opacity"]
@@ -135,6 +136,12 @@ class SpotlightUI:
         self.root.bind("<Escape>", self._on_escape)
         self.root.bind("<FocusIn>", self._on_focus_in)
         self.root.bind("<FocusOut>", self._on_focus_out)
+        # Ctrl+/- 字体大小调整
+        self.root.bind("<Control-plus>", lambda e: self._on_font_size_change(1))
+        self.root.bind("<Control-equal>", lambda e: self._on_font_size_change(1))
+        self.root.bind("<Control-KP_Add>", lambda e: self._on_font_size_change(1))
+        self.root.bind("<Control-minus>", lambda e: self._on_font_size_change(-1))
+        self.root.bind("<Control-KP_Subtract>", lambda e: self._on_font_size_change(-1))
         self._drag_x = 0
         self._drag_y = 0
 
@@ -332,6 +339,13 @@ class SpotlightUI:
             # 应用透明度
             self.opacity = new_cfg.get("ui", {}).get("opacity", 0.95)
             self.root.attributes("-alpha", self.opacity)
+            # 应用字体大小
+            new_font_size = new_cfg.get("ui", {}).get("font_size", 13)
+            self.sm._font_size_delta = new_font_size - 13
+            for widget in self.root.winfo_children():
+                widget.destroy()
+            self._build_widgets()
+            self.anim = AnimationEngine(self.root)
             self._show_toast("设置已保存 ✓", 1500)
 
         def _on_theme_change(theme_name):
@@ -370,6 +384,25 @@ class SpotlightUI:
             widget.destroy()
         self._build_widgets()
         self.anim = AnimationEngine(self.root)
+
+    def _on_font_size_change(self, delta: int):
+        """Ctrl+/- 调整字体大小并重建 UI"""
+        current = self.cfg.get("ui", {}).get("font_size", 13)
+        new_size = max(8, min(24, current + delta))
+        if new_size == current:
+            return
+        self.cfg["ui"]["font_size"] = new_size
+        self.sm._font_size_delta = new_size - 13
+        # Rebuild UI with new font sizes
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        self._build_widgets()
+        self.anim = AnimationEngine(self.root)
+        # Persist
+        from config import save_config
+        save_config(self.cfg)
+        sign = "+" if delta > 0 else ""
+        self._show_toast(f"字体大小 {new_size} ({sign}{delta})", 1200)
 
     def _poll_system_theme(self):
         """Periodically check if the Windows system theme changed and auto-switch."""
