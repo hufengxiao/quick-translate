@@ -87,10 +87,29 @@ def setup_logging():
 # ── 主应用 ──
 
 def main():
+    # Parse --translate CLI argument (launched from context menu)
+    translate_text = None
+    if "--translate" in sys.argv:
+        idx = sys.argv.index("--translate")
+        if idx + 1 < len(sys.argv):
+            translate_text = sys.argv[idx + 1].strip()
+
     # 单实例检测
     instance = SingleInstance()
     if instance.check():
-        print("Quick Translate 已在运行中")
+        # If launched with --translate, try to send text to existing instance
+        # via a simple file-based IPC (clipboard approach)
+        if translate_text:
+            import subprocess
+            # Copy text to clipboard using Windows clip command
+            try:
+                proc = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
+                proc.communicate(translate_text.encode("utf-16-le"))
+            except Exception:
+                pass
+            print(f"Quick Translate 已在运行，已复制到剪贴板: {translate_text[:50]}")
+        else:
+            print("Quick Translate 已在运行中")
         sys.exit(0)
 
     logger = setup_logging()
@@ -238,6 +257,16 @@ def main():
         )
         clipboard_monitor.start()
         logger.info("剪贴板监听已开启")
+    # If launched with --translate, show the UI with the text pre-filled
+    if translate_text:
+        def _show_translate():
+            ui.show()
+            ui.entry.delete(0, tk.END)
+            ui.entry.insert(0, translate_text)
+            ui._do_search()
+        # Delay slightly to let UI initialize
+        ui.root.after(200, _show_translate)
+        logger.info(f"右键翻译: {translate_text[:50]}")
 
     # 自动更新检测
     try:

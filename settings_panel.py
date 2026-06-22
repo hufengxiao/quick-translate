@@ -5,6 +5,7 @@
 import tkinter as tk
 import ctypes
 from src.utils.autostart import set_autostart, is_autostart_enabled
+from src.utils.context_menu import is_installed as is_context_menu_installed, set_enabled as set_context_menu_enabled
 
 
 class SettingsPanel:
@@ -120,6 +121,7 @@ class SettingsPanel:
         self._build_ai_section()
         self._build_clipboard_section()
         self._build_autostart_section()
+        self._build_context_menu_section()
 
         # ── 底部按钮 ──
         btn_frame = tk.Frame(win, bg=self.p.bg_primary, height=44)
@@ -339,6 +341,27 @@ class SettingsPanel:
                  font=("Segoe UI", 9), bg=self.p.bg_tertiary,
                  fg=self.p.text_tertiary).pack(padx=16, pady=(0, 12), anchor="w")
 
+    def _build_context_menu_section(self):
+        self._section_header("右键菜单")
+
+        # 检测实际注册表状态
+        current_state = is_context_menu_installed()
+        ctx_var = tk.BooleanVar(value=current_state)
+        self._vars["context_menu.enabled"] = ctx_var
+
+        cb = tk.Checkbutton(
+            self._content, text="添加右键菜单翻译", variable=ctx_var,
+            font=("Segoe UI", 10), bg=self.p.bg_tertiary,
+            fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
+            activebackground=self.p.bg_tertiary,
+            activeforeground=self.p.accent_primary,
+        )
+        cb.pack(padx=16, pady=(0, 4), anchor="w")
+
+        tk.Label(self._content, text="右键文件/文件夹时显示\"用 Quick Translate 翻译\"",
+                 font=("Segoe UI", 9), bg=self.p.bg_tertiary,
+                 fg=self.p.text_tertiary).pack(padx=16, pady=(0, 12), anchor="w")
+
     # ── 辅助组件 ──
 
     def _section_header(self, text):
@@ -400,6 +423,7 @@ class SettingsPanel:
         hk = self.cfg.setdefault("hotkey", {})
         ai = self.cfg.setdefault("ai", {})
         clip = self.cfg.setdefault("clipboard", {})
+        ctx = self.cfg.setdefault("context_menu", {})
 
         # 外观
         ui["theme"] = self._vars["ui.theme"].get()
@@ -428,6 +452,11 @@ class SettingsPanel:
         self.cfg.setdefault("autostart", {})["enabled"] = autostart_enabled
         set_autostart(autostart_enabled)
 
+        # 右键菜单
+        ctx_menu_enabled = self._vars["context_menu.enabled"].get()
+        ctx["enabled"] = ctx_menu_enabled
+        set_context_menu_enabled(ctx_menu_enabled)
+
         if self.on_save:
             self.on_save(self.cfg)
 
@@ -450,6 +479,7 @@ class SettingsPanel:
         self._vars["clipboard.monitor_enabled"].set(False)
         self._vars["clipboard.min_length"].set(2)
         self._vars["autostart.enabled"].set(False)
+        self._vars["context_menu.enabled"].set(False)
         if self.on_theme_change:
             self.on_theme_change("dark")
 

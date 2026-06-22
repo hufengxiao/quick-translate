@@ -132,6 +132,11 @@ class AutostartConfig:
 
 
 @dataclass
+class ContextMenuConfig:
+    enabled: bool = False
+
+
+@dataclass
 class AppConfig:
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
     ui: UIConfig = field(default_factory=UIConfig)
@@ -139,6 +144,7 @@ class AppConfig:
     dictionary: DictionaryConfig = field(default_factory=DictionaryConfig)
     clipboard: ClipboardConfig = field(default_factory=ClipboardConfig)
     autostart: AutostartConfig = field(default_factory=AutostartConfig)
+    context_menu: ContextMenuConfig = field(default_factory=ContextMenuConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     window_position: dict = field(default_factory=dict)
 
@@ -204,6 +210,10 @@ def _dict_to_config(d: dict) -> AppConfig:
         for k, v in d["autostart"].items():
             if hasattr(cfg.autostart, k):
                 setattr(cfg.autostart, k, v)
+    if "context_menu" in d:
+        for k, v in d["context_menu"].items():
+            if hasattr(cfg.context_menu, k):
+                setattr(cfg.context_menu, k, v)
     if "logging" in d:
         for k, v in d["logging"].items():
             if hasattr(cfg.logging, k):

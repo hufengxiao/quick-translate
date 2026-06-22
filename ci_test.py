@@ -1284,7 +1284,64 @@ def test_autostart():
 test("Auto-start", test_autostart)
 
 
-print(f"\nResults: {30 - len(errors)} passed / {len(errors)} failed")
+# 31. Context menu registry management
+def test_context_menu():
+    from src.utils.context_menu import (
+        is_installed, install, uninstall, set_enabled,
+    )
+    import sys
+
+    if sys.platform != "win32":
+        # On non-Windows, all functions should return False/no-op
+        assert is_installed() is False
+        assert install() is False
+        assert uninstall() is False
+        assert set_enabled(True) is False
+        return
+
+    # Save current state
+    original = is_installed()
+
+    # Test install
+    result = install()
+    assert result is True, "install() should return True on Windows"
+    assert is_installed() is True, "should be installed after install()"
+
+    # Test uninstall
+    result = uninstall()
+    assert result is True, "uninstall() should return True on Windows"
+    assert is_installed() is False, "should be uninstalled after uninstall()"
+
+    # Test set_enabled toggle
+    set_enabled(True)
+    assert is_installed() is True
+    set_enabled(False)
+    assert is_installed() is False
+
+    # Uninstall again is idempotent
+    assert uninstall() is True
+    assert is_installed() is False
+
+    # Restore original state
+    if original:
+        install()
+
+
+test("Context Menu", test_context_menu)
+
+
+# 32. Config context_menu field
+def test_config_context_menu():
+    from src.utils.config import load_config, save_config
+    cfg = load_config()
+    assert hasattr(cfg, 'context_menu')
+    assert cfg.context_menu.enabled is False
+
+
+test("Config Context Menu", test_config_context_menu)
+
+
+print(f"\nResults: {32 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
