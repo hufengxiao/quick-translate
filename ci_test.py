@@ -830,7 +830,72 @@ def test_multi_translator():
 test("Multi AI Translator", test_multi_translator)
 
 
-print(f"\nResults: {24 - len(errors)} passed / {len(errors)} failed")
+# 25. Translation Cache
+def test_translation_cache():
+    from translator import TranslationCache
+
+    c = TranslationCache(max_size=3)
+    assert c.get("hello") is None  # miss
+    c.put("hello", "你好")
+    assert c.get("hello") == "你好"  # hit
+    assert c.size == 1
+    assert c.stats()["hits"] == 1
+    assert c.stats()["misses"] == 1
+
+    # LRU eviction
+    c.put("world", "世界")
+    c.put("apple", "苹果")
+    c.put("banana", "香蕉")  # evicts "hello"
+    assert c.get("hello") is None
+    assert c.get("banana") == "香蕉"
+    assert c.size == 3
+
+    # Thread safety
+    import threading
+    c2 = TranslationCache(100)
+    errs = []
+
+    def w():
+        for i in range(100):
+            try:
+                c2.put(f"t{i}", f"r{i}")
+            except Exception as e:
+                errs.append(e)
+
+    def r():
+        for i in range(100):
+            try:
+                c2.get(f"t{i}")
+            except Exception as e:
+                errs.append(e)
+
+    ts = [threading.Thread(target=w), threading.Thread(target=r)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert not errs
+
+    # Cache integration with AITranslator
+    from translator import AITranslator
+    ai = AITranslator("http://localhost", "k", "m", "p", cache_size=10)
+    assert hasattr(ai, "_cache")
+    assert isinstance(ai._cache, TranslationCache)
+
+    # Cache integration with MultiAITranslator
+    from translator import MultiAITranslator
+    multi = MultiAITranslator(providers=[], system_prompt="test", cache_size=10)
+    assert hasattr(multi, "_cache")
+    assert isinstance(multi._cache, TranslationCache)
+
+    # Clear
+    c.clear()
+    assert c.size == 0
+    assert c.stats()["hits"] == 0
+
+
+test("Translation Cache", test_translation_cache)
+
+
+print(f"\nResults: {25 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

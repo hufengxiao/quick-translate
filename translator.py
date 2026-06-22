@@ -4,14 +4,71 @@ import urllib.error
 import json
 import ssl
 import threading
+from collections import OrderedDict
 from typing import Optional, Callable
+
+
+class TranslationCache:
+    """Thread-safe LRU cache for AI translation results."""
+
+    def __init__(self, max_size: int = 256):
+        self._cache: OrderedDict[str, str] = OrderedDict()
+        self._max_size = max_size
+        self._hits = 0
+        self._misses = 0
+        self._lock = threading.Lock()
+
+    def get(self, text: str) -> Optional[str]:
+        """Get cached translation. Returns None on miss."""
+        key = text.strip()
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self._hits += 1
+                return self._cache[key]
+            self._misses += 1
+        return None
+
+    def put(self, text: str, result: str) -> None:
+        """Cache a translation result."""
+        key = text.strip()
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            self._cache[key] = result
+            while len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+            self._hits = 0
+            self._misses = 0
+
+    @property
+    def size(self) -> int:
+        return len(self._cache)
+
+    @property
+    def hit_rate(self) -> float:
+        total = self._hits + self._misses
+        return self._hits / total if total > 0 else 0.0
+
+    def stats(self) -> dict:
+        return {
+            "size": self.size,
+            "max_size": self._max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": f"{self.hit_rate:.1%}",
+        }
 
 
 class AITranslator:
     """AI 翻译器，调用 OpenAI 兼容 API（单 provider）"""
 
     def __init__(self, api_base: str, api_key: str, model: str, system_prompt: str,
-                 name: str = ""):
+                 name: str = "", cache_size: int = 256):
         self.api_base = api_base.rstrip("/")
         self.api_key = api_key
         self.model = model
@@ -19,9 +76,15 @@ class AITranslator:
         self.name = name or model
         self._busy = False
         self._lock = threading.Lock()
+        self._cache = TranslationCache(max_size=cache_size)
 
     def translate(self, text: str, callback: Callable[[str], None], error_callback: Optional[Callable[[str], None]] = None):
-        """异步翻译文本，结果通过回调返回"""
+        """异步翻译文本，结果通过回调返回（优先查缓存）"""
+        # Cache hit — return immediately without locking _busy
+        cached = self._cache.get(text)
+        if cached is not None:
+            callback(cached)
+            return
         with self._lock:
             if self._busy:
                 return
@@ -36,6 +99,7 @@ class AITranslator:
     def _do_translate(self, text: str, callback, error_callback):
         try:
             result = self._call_api(text)
+            self._cache.put(text, result)
             callback(result)
         except Exception as e:
             if error_callback:
@@ -88,18 +152,21 @@ class AITranslator:
 class MultiAITranslator:
     """多 AI 模型翻译器 — 按优先级尝试多个 provider，自动切换失败的模型"""
 
-    def __init__(self, providers: list, system_prompt: str, auto_switch: bool = True):
+    def __init__(self, providers: list, system_prompt: str, auto_switch: bool = True,
+                 cache_size: int = 256):
         """
         Args:
             providers: list of AIProvider-like objects (name, api_base, api_key, model, priority, enabled)
             system_prompt: shared system prompt for all providers
             auto_switch: if True, auto-try next provider on failure
+            cache_size: max entries in translation result cache
         """
         self._translators: list[AITranslator] = []
         self._auto_switch = auto_switch
         self._busy = False
         self._lock = threading.Lock()
         self._current_index = 0
+        self._cache = TranslationCache(max_size=cache_size)
 
         for p in providers:
             if not p.enabled:
@@ -116,7 +183,12 @@ class MultiAITranslator:
 
     def translate(self, text: str, callback: Callable[[str], None],
                   error_callback: Optional[Callable[[str], None]] = None):
-        """异步翻译文本，失败时自动切换到下一个 provider"""
+        """异步翻译文本，失败时自动切换到下一个 provider（优先查缓存）"""
+        # Cache hit — return immediately without locking _busy
+        cached = self._cache.get(text)
+        if cached is not None:
+            callback(cached)
+            return
         with self._lock:
             if self._busy:
                 return
@@ -146,6 +218,7 @@ class MultiAITranslator:
             try:
                 result = translator._call_api(text)
                 self._current_index = idx  # Stick to successful provider
+                self._cache.put(text, result)
                 callback(result)
                 with self._lock:
                     self._busy = False
