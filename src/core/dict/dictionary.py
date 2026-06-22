@@ -8,6 +8,7 @@ from typing import List, Dict, Optional, Callable
 from ..index.exact import ExactIndex
 from ..index.trie import TrieIndex
 from ..index.bktree import BKTree
+from ..index.pinyin import PinyinIndex
 from ..index.router import QueryRouter
 from ..cache.lru import LRUCache
 from ..lazy.loader import LazyDictLoader
@@ -18,8 +19,7 @@ class Dictionary:
     """High-performance dictionary with cascading index strategy.
 
     Phase 1 (sync, <200ms): ExactIndex + TrieIndex on 10K common words
-    Phase 2 (background): BKTree on 10K words (~2s)
-    Phase 3 (background): rebuild all 3 indexes on full 66K dict
+    Phase 2 (background): BKTree + PinyinIndex on full 66K dict
     """
 
     def __init__(self, dict_path: str, preload_count: int = 10000,
@@ -28,6 +28,7 @@ class Dictionary:
         self._exact = ExactIndex()
         self._trie = TrieIndex()
         self._bktree = BKTree()
+        self._pinyin = PinyinIndex(cache_path=dict_path + ".pinyin_cache")
         self._cache = LRUCache(max_size=cache_size)
         self._loader = LazyDictLoader(dict_path, preload_count)
         self._router: Optional[QueryRouter] = None
@@ -60,40 +61,46 @@ class Dictionary:
         logger.info("Fast indexes ready: {} words in {:.0f}ms", len(data), elapsed)
 
     def _build_fast_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
-        """Build exact + trie only (fast). BKTree comes later in background."""
+        """Build exact + trie only (fast). BKTree + PinyinIndex come later in background."""
         new_exact = ExactIndex()
         new_exact.load(data)
         new_trie = TrieIndex()
         new_trie.load(data)
         self._exact = new_exact
         self._trie = new_trie
-        # Use empty BKTree for now
+        # Use empty indexes for now
         self._router = QueryRouter(
             exact=self._exact,
             trie=self._trie,
             cache=self._cache,
             bktree=BKTree(),  # empty, no fuzzy yet
+            pinyin_index=PinyinIndex(),  # empty, no pinyin yet
             sorted_keys=sorted_keys,
             raw_dict=data,
         )
 
     def _build_all_indexes(self, data: dict[str, str], sorted_keys: list[str]) -> None:
-        """Build all indexes including BKTree. Called from background thread."""
+        """Build all indexes including BKTree + PinyinIndex. Called from background thread."""
         new_exact = ExactIndex()
         new_exact.load(data)
         new_trie = TrieIndex()
         new_trie.load(data)
         new_bktree = BKTree()
         new_bktree.load(data)
+        dict_mtime = os.path.getmtime(self._dict_path) if os.path.exists(self._dict_path) else 0.0
+        new_pinyin = PinyinIndex(cache_path=self._dict_path + ".pinyin_cache")
+        new_pinyin.build_from_entries(data, dict_mtime=dict_mtime)
         # Atomic swap
         self._exact = new_exact
         self._trie = new_trie
         self._bktree = new_bktree
+        self._pinyin = new_pinyin
         self._router = QueryRouter(
             exact=self._exact,
             trie=self._trie,
             cache=self._cache,
             bktree=self._bktree,
+            pinyin_index=self._pinyin,
             sorted_keys=sorted_keys,
             raw_dict=data,
         )

@@ -1,9 +1,16 @@
-"""本地词典查询模块 — MDX 原生词典 + JSON fallback + 拼写纠错"""
+"""本地词典查询模块 — MDX 原生词典 + JSON fallback + 拼写纠错 + 拼音搜索"""
 import bisect
 import json
 import os
+import pickle
 import re
 from typing import List, Dict, Optional
+
+try:
+    from pypinyin import pinyin as _pinyin_func, Style
+    _HAS_PYPINYIN = True
+except ImportError:
+    _HAS_PYPINYIN = False
 
 
 def _levenshtein(s: str, t: str) -> int:
@@ -42,6 +49,7 @@ class Dictionary:
         self.entries: Dict[str, str] = {}
         self.sorted_keys: List[str] = []
         self._len_index: Dict[int, List[str]] = {}  # length → [words] for spell correction
+        self._pinyin_index: Dict[str, List[Dict[str, str]]] = {}  # pinyin → [{word, definition, source}]
         self.dict_path = dict_path
         self._mdx = mdx_dict  # MDXDictionary instance (optional)
         self._cache: Dict[str, List[Dict]] = {}  # 查询缓存
@@ -66,12 +74,78 @@ class Dictionary:
                 if wl not in self._len_index:
                     self._len_index[wl] = []
                 self._len_index[wl].append(w)
+            # Build pinyin index for Chinese word search
+            self._build_pinyin_index()
             print(f"[Dict] JSON fallback: {len(self.entries)} entries")
         except Exception as e:
             print(f"[Dict] Failed to load JSON: {e}")
 
         if self._mdx and self._mdx.is_ready:
             print(f"[Dict] MDX primary: {self._mdx.word_count:,} entries")
+
+    def _build_pinyin_index(self):
+        """Build pinyin → Chinese-word index from definitions. Uses disk cache."""
+        if not _HAS_PYPINYIN:
+            return
+
+        cache_path = self.dict_path + ".pinyin_cache"
+        dict_mtime = os.path.getmtime(self.dict_path)
+
+        # Try loading from cache
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "rb") as f:
+                    cache_mtime, index = pickle.load(f)
+                if cache_mtime >= dict_mtime:
+                    self._pinyin_index = index
+                    return
+            except Exception:
+                pass  # cache invalid, rebuild
+
+        # Build from scratch
+        import time as _t
+        t0 = _t.perf_counter()
+        cjk_re = re.compile(r"[\u4e00-\u9fff]{2,8}")
+        index: Dict[str, List[Dict[str, str]]] = {}
+        for eng_word, definition in self.entries.items():
+            for cjk in cjk_re.findall(definition):
+                syllables = _pinyin_func(cjk, style=Style.NORMAL)
+                py = "".join(s[0] for s in syllables).lower()
+                if not py:
+                    continue
+                bucket = index.get(py)
+                if bucket is None:
+                    bucket = []
+                    index[py] = bucket
+                if not any(r["word"] == cjk for r in bucket):
+                    bucket.append({
+                        "word": cjk,
+                        "definition": definition[:300],
+                        "source": eng_word,
+                    })
+        self._pinyin_index = index
+        elapsed = _t.perf_counter() - t0
+        print(f"[Dict] Pinyin index: {len(index)} keys in {elapsed:.1f}s")
+
+        # Save to cache
+        try:
+            with open(cache_path, "wb") as f:
+                pickle.dump((dict_mtime, index), f)
+        except Exception:
+            pass
+
+    def search_pinyin(self, query: str, limit: int = 20) -> List[Dict[str, str]]:
+        """拼音搜索：输入拼音查找中文词。例如输入 'nihao' 找到 '你好'。"""
+        if not query or not _HAS_PYPINYIN:
+            return []
+        q = query.strip().lower()
+        if not q or not q.isalpha():
+            return []
+        bucket = self._pinyin_index.get(q)
+        if not bucket:
+            return []
+        return [{"word": r["word"], "definition": r["definition"]}
+                for r in bucket[:limit]]
 
     def search_prefix(self, prefix: str, limit: int = 20) -> List[Dict[str, str]]:
         if not prefix:
@@ -156,6 +230,16 @@ class Dictionary:
             spell_results = self.search_spell(query_lower, tolerance=2, limit=5)
             if spell_results:
                 results = spell_results
+
+        # 拼音搜索：当 query 为纯字母时，追加拼音匹配结果
+        if query_lower.isalpha():
+            pinyin_results = self.search_pinyin(query_lower, limit=limit)
+            if pinyin_results:
+                seen = {r["word"] for r in results}
+                for r in pinyin_results:
+                    if r["word"] not in seen:
+                        results.append(r)
+                        seen.add(r["word"])
 
         # 缓存
         if len(self._cache) >= self._cache_max:

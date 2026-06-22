@@ -232,6 +232,33 @@ def test_mdx_path_config():
     assert "牛津" in cfg["dictionary"]["mdx_path"]
 
 
+# 13b. Pinyin search
+def test_pinyin_search():
+    from dictionary import Dictionary
+    from src.utils.config import load_config
+    cfg = load_config()
+    dp = cfg.dictionary.dict_path
+    if not os.path.isabs(dp):
+        dp = os.path.join(".", dp)
+    assert os.path.exists(dp), f"Dict not found: {dp}"
+    d = Dictionary(dp)
+    # "nihao" should find "你好" via pinyin matching
+    results = d.search_pinyin("nihao", limit=10)
+    words = [r["word"] for r in results]
+    assert "你好" in words, f"'你好' not in pinyin results for 'nihao': {words}"
+    # Integration: search_fuzzy should fall back to pinyin
+    results2 = d.search_fuzzy("nihao", limit=10)
+    words2 = [r["word"] for r in results2]
+    assert "你好" in words2, f"'你好' not in fuzzy results for 'nihao': {words2}"
+    # "zhongguo" should find "中国"
+    results3 = d.search_pinyin("zhongguo", limit=10)
+    words3 = [r["word"] for r in results3]
+    assert "中国" in words3, f"'中国' not in pinyin results for 'zhongguo': {words3}"
+    # Empty / non-alpha queries should return nothing
+    assert d.search_pinyin("") == []
+    assert d.search_pinyin("123") == []
+
+
 print("Running tests...")
 test("Config", test_config)
 test("Errors", test_errors)
@@ -247,6 +274,7 @@ test("No TTS", test_no_tts)
 test("Clipboard Monitor", test_clipboard)
 test("Config Clipboard", test_config_clipboard)
 test("MDX Path Config", test_mdx_path_config)
+test("Pinyin Search", test_pinyin_search)
 
 
 # 14. Startup benchmark
@@ -292,7 +320,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {16 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {17 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

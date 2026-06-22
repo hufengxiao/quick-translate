@@ -3,6 +3,7 @@
 
 # Recommended:
 loguru>=0.7.0              # Structured logging (falls back to stdlib if missing)
+pypinyin>=0.50.0           # Chinese pinyin conversion for pinyin search
 
 # Optional:
 pywin32>=306               # Windows COM — enables TTS pronunciation (SAPI5)
