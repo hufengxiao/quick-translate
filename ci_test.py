@@ -1090,7 +1090,80 @@ def test_word_root():
 test("Word Root Analysis", test_word_root)
 
 
-print(f"\nResults: {27 - len(errors)} passed / {len(errors)} failed")
+# 28. Synonyms & Antonyms (近义词/反义词)
+def test_synonyms():
+    from synonyms import get_synonyms, get_antonyms, get_related_words, format_related_words, has_data
+
+    # Basic synonym lookup
+    syns = get_synonyms("happy")
+    assert len(syns) > 0, f"'happy' should have synonyms: {syns}"
+    assert "glad" in syns, f"'glad' should be synonym of 'happy': {syns}"
+    assert "cheerful" in syns, f"'cheerful' should be synonym of 'happy': {syns}"
+
+    # Basic antonym lookup
+    ants = get_antonyms("happy")
+    assert len(ants) > 0, f"'happy' should have antonyms: {ants}"
+    assert "sad" in ants, f"'sad' should be antonym of 'happy': {ants}"
+
+    # get_related_words returns both
+    related = get_related_words("happy")
+    assert "synonyms" in related
+    assert "antonyms" in related
+    assert len(related["synonyms"]) > 0
+    assert len(related["antonyms"]) > 0
+
+    # format_related_words
+    fmt = format_related_words("happy")
+    assert "近义词" in fmt, f"Should contain '近义词': {fmt}"
+    assert "反义词" in fmt, f"Should contain '反义词': {fmt}"
+    assert "glad" in fmt
+    assert "sad" in fmt
+
+    # has_data
+    assert has_data("happy") is True
+    assert has_data("nonexistent") is False
+
+    # Case insensitive
+    assert len(get_synonyms("HAPPY")) > 0
+    assert len(get_antonyms("Happy")) > 0
+
+    # Empty / None
+    assert get_synonyms("") == []
+    assert get_antonyms("") == []
+    assert get_synonyms(None) == []
+
+    # Word not in database
+    assert get_synonyms("xyznonexistent") == []
+    assert get_antonyms("xyznonexistent") == []
+    assert format_related_words("xyznonexistent") == ""
+
+    # Verify some verb entries
+    syns_accept = get_synonyms("accept")
+    assert "receive" in syns_accept, f"'receive' should be synonym of 'accept': {syns_accept}"
+    ants_accept = get_antonyms("accept")
+    assert "reject" in ants_accept, f"'reject' should be antonym of 'accept': {ants_accept}"
+
+    # Verify some noun entries
+    syns_happiness = get_synonyms("happiness")
+    assert "joy" in syns_happiness, f"'joy' should be synonym of 'happiness': {syns_happiness}"
+    ants_happiness = get_antonyms("happiness")
+    assert "sadness" in ants_happiness, f"'sadness' should be antonym of 'happiness': {ants_happiness}"
+
+    # Verify some adverb entries
+    syns_quickly = get_synonyms("quickly")
+    assert "rapidly" in syns_quickly, f"'rapidly' should be synonym of 'quickly': {syns_quickly}"
+    ants_quickly = get_antonyms("quickly")
+    assert "slowly" in ants_quickly, f"'slowly' should be antonym of 'quickly': {ants_quickly}"
+
+    # Database should have reasonable coverage
+    from synonyms import _SYNONYM_ANTONYM_DB
+    assert len(_SYNONYM_ANTONYM_DB) >= 200, f"Expected >= 200 entries, got {len(_SYNONYM_ANTONYM_DB)}"
+
+
+test("Synonyms & Antonyms", test_synonyms)
+
+
+print(f"\nResults: {28 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
