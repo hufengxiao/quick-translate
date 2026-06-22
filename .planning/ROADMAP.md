@@ -77,16 +77,16 @@
 - [x] 动画速度可调
 - [x] 多显示器支持：窗口记忆屏幕位置
 
-### Phase 9: Translation Quality
+### Phase 9: Translation Quality ✅
 **Goal:** 翻译结果更丰富准确
-**Status:** PLANNED
+**Status:** DONE
 
 - [x] 多 AI 模型支持：配置多个 API，自动切换
 - [x] 翻译缓存：相同查询不重复调用 API
 - [x] 翻译历史：保存 AI 翻译结果
 - [x] 词根分析：显示词根、前缀、后缀
 - [x] 近义词/反义词：显示相关词汇
-- [ ] 常用搭配：显示词组搭配
+- [x] 常用搭配：显示词组搭配
 
 ### Phase 10: Distribution & Polish
 **Goal:** 更好的分发和用户体验

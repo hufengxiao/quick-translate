@@ -1163,7 +1163,82 @@ def test_synonyms():
 test("Synonyms & Antonyms", test_synonyms)
 
 
-print(f"\nResults: {28 - len(errors)} passed / {len(errors)} failed")
+# 29. Collocations (常用搭配)
+def test_collocations():
+    from collocations import get_collocations, format_collocations, has_data
+
+    # Basic collocation lookup
+    colls = get_collocations("make")
+    assert len(colls) > 0, f"'make' should have collocations: {colls}"
+    assert "make a decision" in colls, f"'make a decision' should be collocation of 'make': {colls}"
+    assert "make progress" in colls, f"'make progress' should be collocation of 'make': {colls}"
+
+    # Another verb
+    colls_take = get_collocations("take")
+    assert "take a break" in colls_take
+    assert "take care of" in colls_take
+
+    # Noun collocations
+    colls_time = get_collocations("time")
+    assert "in time" in colls_time
+    assert "on time" in colls_time
+
+    # Adjective collocations
+    colls_good = get_collocations("good")
+    assert "good at" in colls_good
+
+    # format_collocations
+    fmt = format_collocations("make")
+    assert "常用搭配" in fmt, f"Should contain '常用搭配': {fmt}"
+    assert "make a decision" in fmt
+    assert "•" in fmt, f"Should contain bullet points: {fmt}"
+
+    # has_data
+    assert has_data("make") is True
+    assert has_data("take") is True
+    assert has_data("nonexistent_xyz") is False
+
+    # Case insensitive
+    assert len(get_collocations("MAKE")) > 0
+    assert len(get_collocations("Make")) > 0
+
+    # Empty / None
+    assert get_collocations("") == []
+    assert get_collocations(None) == []
+    assert format_collocations("") == ""
+    assert format_collocations("nonexistent_xyz") == ""
+    assert has_data("") is False
+    assert has_data(None) is False
+
+    # Word not in database
+    assert get_collocations("xyznonexistent") == []
+
+    # Database should have reasonable coverage
+    from collocations import _COLLOCATIONS_DB
+    assert len(_COLLOCATIONS_DB) >= 100, f"Expected >= 100 entries, got {len(_COLLOCATIONS_DB)}"
+
+    # Each entry should have at least 3 collocations
+    for word, colls in _COLLOCATIONS_DB.items():
+        assert len(colls) >= 3, f"'{word}' should have >= 3 collocations, got {len(colls)}"
+
+    # Check some specific adverb entries
+    colls_even = get_collocations("even")
+    assert "even if" in colls_even
+
+    # Check some specific preposition entries
+    colls_despite = get_collocations("despite")
+    assert "despite the fact" in colls_despite
+
+    # Return type should be list (copy, not reference)
+    colls1 = get_collocations("make")
+    colls2 = get_collocations("make")
+    assert colls1 is not colls2, "Should return a new list each time"
+
+
+test("Collocations", test_collocations)
+
+
+print(f"\nResults: {29 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
