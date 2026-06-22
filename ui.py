@@ -138,6 +138,17 @@ class SpotlightUI:
         self._drag_x = 0
         self._drag_y = 0
 
+        # Resize state
+        self._resize_zone = ''
+        self._resize_start_x = 0
+        self._resize_start_y = 0
+        self._resize_start_w = 0
+        self._resize_start_h = 0
+        self._resize_start_win_x = 0
+        self._resize_start_win_y = 0
+        self._min_width = 280
+        self._min_height = 300
+
     # ── 拖拽 ──
 
     def _bind_drag(self, widget):
@@ -151,9 +162,122 @@ class SpotlightUI:
         self._win_y = self.root.winfo_y()
 
     def _on_drag_motion(self, event):
+        if self._resize_zone:
+            return  # Don't drag while resizing
         dx = self.root.winfo_pointerx() - self._drag_x
         dy = self.root.winfo_pointery() - self._drag_y
         self.root.geometry(f"+{self._win_x + dx}+{self._win_y + dy}")
+
+    # ── 窗口大小调整 ──
+
+    _RESIZE_BORDER = 6
+
+    def _create_resize_handles(self, parent):
+        """Create invisible resize handles at window edges and corners."""
+        b = self._RESIZE_BORDER
+
+        # Right edge
+        right = tk.Frame(parent, cursor="sb_h_double_arrow",
+                         bg=parent.cget("bg"))
+        right.place(relx=1.0, rely=0, anchor="ne", width=b, relheight=1.0)
+        right.bind("<Button-1>", lambda e: self._resize_start(e, "e"))
+        right.bind("<B1-Motion>", lambda e: self._resize_motion(e, "e"))
+        right.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Bottom edge
+        bottom = tk.Frame(parent, cursor="sb_v_double_arrow",
+                          bg=parent.cget("bg"))
+        bottom.place(relx=0, rely=1.0, anchor="sw", relwidth=1.0, height=b)
+        bottom.bind("<Button-1>", lambda e: self._resize_start(e, "s"))
+        bottom.bind("<B1-Motion>", lambda e: self._resize_motion(e, "s"))
+        bottom.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Left edge
+        left = tk.Frame(parent, cursor="sb_h_double_arrow",
+                        bg=parent.cget("bg"))
+        left.place(relx=0, rely=0, anchor="nw", width=b, relheight=1.0)
+        left.bind("<Button-1>", lambda e: self._resize_start(e, "w"))
+        left.bind("<B1-Motion>", lambda e: self._resize_motion(e, "w"))
+        left.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Top edge
+        top = tk.Frame(parent, cursor="sb_v_double_arrow",
+                       bg=parent.cget("bg"))
+        top.place(relx=0, rely=0, anchor="nw", relwidth=1.0, height=b)
+        top.bind("<Button-1>", lambda e: self._resize_start(e, "n"))
+        top.bind("<B1-Motion>", lambda e: self._resize_motion(e, "n"))
+        top.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Bottom-right corner
+        se = tk.Frame(parent, cursor="sizing", bg=parent.cget("bg"))
+        se.place(relx=1.0, rely=1.0, anchor="se", width=b * 2, height=b * 2)
+        se.bind("<Button-1>", lambda e: self._resize_start(e, "se"))
+        se.bind("<B1-Motion>", lambda e: self._resize_motion(e, "se"))
+        se.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Bottom-left corner
+        sw = tk.Frame(parent, cursor="sizing", bg=parent.cget("bg"))
+        sw.place(relx=0, rely=1.0, anchor="sw", width=b * 2, height=b * 2)
+        sw.bind("<Button-1>", lambda e: self._resize_start(e, "sw"))
+        sw.bind("<B1-Motion>", lambda e: self._resize_motion(e, "sw"))
+        sw.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Top-right corner
+        ne = tk.Frame(parent, cursor="sizing", bg=parent.cget("bg"))
+        ne.place(relx=1.0, rely=0, anchor="ne", width=b * 2, height=b * 2)
+        ne.bind("<Button-1>", lambda e: self._resize_start(e, "ne"))
+        ne.bind("<B1-Motion>", lambda e: self._resize_motion(e, "ne"))
+        ne.bind("<ButtonRelease-1>", self._resize_end)
+
+        # Top-left corner
+        nw = tk.Frame(parent, cursor="sizing", bg=parent.cget("bg"))
+        nw.place(relx=0, rely=0, anchor="nw", width=b * 2, height=b * 2)
+        nw.bind("<Button-1>", lambda e: self._resize_start(e, "nw"))
+        nw.bind("<B1-Motion>", lambda e: self._resize_motion(e, "nw"))
+        nw.bind("<ButtonRelease-1>", self._resize_end)
+
+    def _resize_start(self, event, zone):
+        self._resize_zone = zone
+        self._resize_start_x = event.x_root
+        self._resize_start_y = event.y_root
+        self._resize_start_w = self.root.winfo_width()
+        self._resize_start_h = self.root.winfo_height()
+        self._resize_start_win_x = self.root.winfo_x()
+        self._resize_start_win_y = self.root.winfo_y()
+
+    def _resize_motion(self, event, zone):
+        dx = event.x_root - self._resize_start_x
+        dy = event.y_root - self._resize_start_y
+
+        new_w = self._resize_start_w
+        new_h = self._resize_start_h
+        new_x = self._resize_start_win_x
+        new_y = self._resize_start_win_y
+
+        if 'e' in zone:
+            new_w = max(self._min_width, self._resize_start_w + dx)
+        if 'w' in zone:
+            new_w = max(self._min_width, self._resize_start_w - dx)
+            new_x = self._resize_start_win_x + (self._resize_start_w - new_w)
+        if 's' in zone:
+            new_h = max(self._min_height, self._resize_start_h + dy)
+        if 'n' in zone:
+            new_h = max(self._min_height, self._resize_start_h - dy)
+            new_y = self._resize_start_win_y + (self._resize_start_h - new_h)
+
+        self.root.geometry(
+            f"{int(new_w)}x{int(new_h)}+{int(new_x)}+{int(new_y)}")
+
+    def _resize_end(self, event=None):
+        if not self._resize_zone:
+            return
+        self._resize_zone = ''
+        w = self.root.winfo_width()
+        h = self.root.winfo_height()
+        self.cfg["ui"]["width"] = w
+        self.cfg["ui"]["height"] = h
+        from config import save_config
+        save_config(self.cfg)
 
     # ── 失焦/获焦 ──
 
@@ -442,6 +566,9 @@ class SpotlightUI:
 
         # 新用户引导 toast 序列
         self._show_guide()
+
+        # 窗口大小拖拽调整手柄
+        self._create_resize_handles(main)
 
     # ── 清空输入 ──
 
@@ -745,6 +872,9 @@ class SpotlightUI:
             self.cfg["window_position"] = {}
         self.cfg["window_position"]["x"] = self.root.winfo_x()
         self.cfg["window_position"]["y"] = self.root.winfo_y()
+        # Also save current window size
+        self.cfg["ui"]["width"] = self.root.winfo_width()
+        self.cfg["ui"]["height"] = self.root.winfo_height()
 
     def hide(self):
         self._save_position()
