@@ -340,7 +340,14 @@ class SpotlightUI:
             return
 
         try:
-            self._matches = self.on_search(query)
+            results = self.on_search(query)
+            # 搜索历史优先：历史查过的词排在前面
+            if self.history and results:
+                history_words = {e.get("word", "") for e in self.history.entries}
+                history_hits = [r for r in results if r["word"] in history_words]
+                others = [r for r in results if r["word"] not in history_words]
+                results = history_hits + others
+            self._matches = results
             self._update_listbox(query)
         except Exception as e:
             self._set_definition("搜索出错", str(e))
