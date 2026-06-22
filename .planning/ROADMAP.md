@@ -66,7 +66,7 @@
 - [x] 星标词汇：重要单词加星标置顶
 - [x] 查词统计：显示每日/每周查词数量
 
-### Phase 8: UI Enhancements
+### Phase 8: UI Enhancements ✅
 **Goal:** 界面更精致，交互更流畅
 **Status:** PLANNED
 
@@ -75,7 +75,7 @@
 - [x] 窗口大小可拖拽调整
 - [x] 字体大小可调（Ctrl+/-）
 - [x] 动画速度可调
-- [ ] 多显示器支持：窗口记忆屏幕位置
+- [x] 多显示器支持：窗口记忆屏幕位置
 
 ### Phase 9: Translation Quality
 **Goal:** 翻译结果更丰富准确
