@@ -102,6 +102,7 @@ def main():
     from translator import AITranslator
     from history import SearchHistory
     from vocabulary import VocabularyBook
+    from stats import SearchStats
     from tray import SystemTrayIcon
     from error_handler import ErrorHandler
     from ui import SpotlightUI
@@ -154,9 +155,15 @@ def main():
     # 生词本
     vocabulary = VocabularyBook(max_size=500)
 
+    # 查词统计
+    search_stats = SearchStats()
+
     # 搜索函数
     def search(query: str):
-        return dictionary.search_fuzzy(query, limit=20)
+        results = dictionary.search_fuzzy(query, limit=20)
+        if results:
+            search_stats.record(query)
+        return results
 
     # 翻译函数
     def translate(text, callback, error_callback):

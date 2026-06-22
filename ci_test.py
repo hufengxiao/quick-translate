@@ -604,6 +604,91 @@ def test_vocabulary_star():
 test("Vocabulary Star", test_vocabulary_star)
 
 
+# 21. Search Stats (查词统计)
+def test_search_stats():
+    from stats import SearchStats
+    import tempfile, os, shutil
+    tmpdir = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdir, "stats.json")
+    ss = SearchStats.__new__(SearchStats)
+    ss.max_days = 365
+    ss.daily = {}
+    ss.words = {}
+    ss.file_path = tmpfile
+
+    # Initially empty
+    assert ss.get_today_count() == 0
+    assert ss.get_total_count() == 0
+    assert ss.get_unique_word_count() == 0
+
+    # Record some lookups
+    ss.record("hello")
+    ss.record("world")
+    ss.record("hello")
+
+    assert ss.get_today_count() == 3
+    assert ss.get_total_count() == 3
+    assert ss.get_unique_word_count() == 2
+
+    # Top words
+    top = ss.get_top_words(limit=5)
+    assert len(top) == 2
+    assert top[0]["word"] == "hello"
+    assert top[0]["count"] == 2
+    assert top[1]["word"] == "world"
+    assert top[1]["count"] == 1
+
+    # Daily stats (should have today with count 3)
+    from datetime import datetime
+    today = datetime.now().strftime("%Y-%m-%d")
+    daily = ss.get_daily_stats(days=3)
+    assert len(daily) == 3
+    today_entry = [d for d in daily if d["date"] == today]
+    assert len(today_entry) == 1
+    assert today_entry[0]["count"] == 3
+
+    # Weekly stats
+    weekly = ss.get_weekly_stats(weeks=2)
+    assert len(weekly) == 2
+    # This week should have our 3 records
+    this_week = weekly[-1]
+    assert this_week["count"] == 3
+    # Dates should be valid
+    datetime.strptime(this_week["week_start"], "%Y-%m-%d")
+    datetime.strptime(this_week["week_end"], "%Y-%m-%d")
+
+    # Empty word should be ignored
+    ss.record("")
+    ss.record("   ")
+    assert ss.get_total_count() == 3  # unchanged
+
+    # Case insensitive
+    ss.record("Hello")
+    assert ss.words["hello"] == 3  # merged with existing
+
+    # Clear
+    ss.clear()
+    assert ss.get_today_count() == 0
+    assert ss.get_total_count() == 0
+
+    # Simulate multi-day data
+    from datetime import timedelta
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    ss.daily[yesterday] = 10
+    ss.daily[today] = 5
+    ss.words = {"test": 15}
+    daily2 = ss.get_daily_stats(days=2)
+    assert daily2[0]["date"] == yesterday
+    assert daily2[0]["count"] == 10
+    assert daily2[1]["date"] == today
+    assert daily2[1]["count"] == 5
+
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+test("Search Stats", test_search_stats)
+
+
 # 14. Startup benchmark
 def test_startup():
     import subprocess
@@ -647,7 +732,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {21 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {22 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
