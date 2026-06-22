@@ -9,6 +9,7 @@ from typing import Optional, Callable, List, Dict
 from styles import StyleManager
 from animations import AnimationEngine
 from settings_panel import SettingsPanel
+from src.utils.monitor import clamp_position, get_monitor_rects
 
 # POS tag extraction pattern (same as src/ui/spotlight.py)
 _POS_PATTERN = re.compile(
@@ -108,6 +109,8 @@ class SpotlightUI:
         pos = self.cfg.get("window_position")
         if pos and "x" in pos and "y" in pos:
             x, y = pos["x"], pos["y"]
+            # Multi-monitor: ensure position is on a visible monitor
+            x, y = clamp_position(x, y, w, h)
         else:
             sw = self.root.winfo_screenwidth()
             sh = self.root.winfo_screenheight()

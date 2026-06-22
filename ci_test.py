@@ -732,7 +732,39 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {22 - len(errors)} passed / {len(errors)} failed")
+
+# 22. Multi-monitor position clamping
+def test_monitor_clamp():
+    from src.utils.monitor import get_monitor_rects, point_on_monitor, clamp_position, window_visible_on_monitor
+    # Should return at least one monitor (even on CI)
+    rects = get_monitor_rects()
+    assert len(rects) >= 1, f"Expected >= 1 monitor, got {len(rects)}"
+    # Each rect should be (left, top, right, bottom)
+    for r in rects:
+        assert len(r) == 4
+        l, t, ri, b = r
+        assert ri > l and b > t, f"Invalid monitor rect: {r}"
+    # Point at 0,0 should be on monitor (primary)
+    assert point_on_monitor(0, 0, rects) is True
+    # Point at -99999,-99999 should not be on any monitor
+    assert point_on_monitor(-99999, -99999, rects) is False
+    # clamp_position with valid coords should return same coords
+    l, t, ri, b = rects[0]
+    cx, cy = l + 100, t + 100
+    assert clamp_position(cx, cy, 400, 300, rects) == (cx, cy)
+    # clamp_position with off-screen coords should move to primary monitor
+    nx, ny = clamp_position(-99999, -99999, 400, 300, rects)
+    assert nx >= l and ny >= t, f"Clamped position still off-screen: ({nx}, {ny})"
+    # window_visible_on_monitor with valid position
+    assert window_visible_on_monitor(cx, cy, 400, 300, rects) is True
+    # window_visible_on_monitor with far off-screen
+    assert window_visible_on_monitor(-99999, -99999, 400, 300, rects) is False
+
+
+test("Multi-Monitor", test_monitor_clamp)
+
+
+print(f"\nResults: {23 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

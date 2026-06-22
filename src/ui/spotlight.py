@@ -11,6 +11,7 @@ from .theme import Theme, DARK, get_theme
 from .animator import Animator
 from .layout import Spacing, Sizes, Fonts
 from ..utils.logging import logger
+from ..utils.monitor import clamp_position
 
 # POS tag patterns for extraction from definition text
 _POS_PATTERN = re.compile(
@@ -137,6 +138,8 @@ class SpotlightUI:
         pos = self.cfg.window_position
         if pos and "x" in pos and "y" in pos:
             x, y = pos["x"], pos["y"]
+            # Multi-monitor: ensure position is on a visible monitor
+            x, y = clamp_position(x, y, w, h)
         else:
             sw = self.root.winfo_screenwidth()
             sh = self.root.winfo_screenheight()
