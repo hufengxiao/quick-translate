@@ -149,7 +149,7 @@ class SettingsPanel:
         self._vars["ui.theme"] = theme_var
         theme_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
         theme_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
-        for text, val in [("深色", "dark"), ("浅色", "light"), ("高对比", "high_contrast")]:
+        for text, val in [("跟随系统", "system"), ("深色", "dark"), ("浅色", "light"), ("高对比", "high_contrast")]:
             rb = tk.Radiobutton(
                 theme_frame, text=text, variable=theme_var, value=val,
                 font=("Segoe UI", 10), bg=self.p.bg_tertiary,

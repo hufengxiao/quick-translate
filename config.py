@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
         "height": 480,
         "opacity": 0.95,
         "font_size": 13,
-        "theme": "dark",  # dark / light / high_contrast
+        "theme": "dark",  # dark / light / high_contrast / system
         "bg_color": "#1e1e2e",
         "fg_color": "#cdd6f4",
         "accent_color": "#89b4fa",

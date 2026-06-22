@@ -86,6 +86,10 @@ class SpotlightUI:
         self._ai_pending_query = None
         self._detail_mode = False  # False=list mode, True=detail mode
 
+        # System theme polling state
+        self._config_theme = theme_name  # raw config value (may be "system")
+        self._last_system_theme = self.sm.theme if theme_name == 'system' else None
+
         self._build_window()
         self._build_widgets()
         self.anim = AnimationEngine(self.root)
@@ -227,9 +231,14 @@ class SpotlightUI:
 
     def _apply_theme(self, theme_name: str):
         """Switch theme and rebuild the UI with new colors."""
+        self._config_theme = theme_name  # track raw config value
         self.sm.set_theme(theme_name)
         self.p = self.sm.palette
         self.cfg["ui"]["theme"] = theme_name
+        if theme_name == 'system':
+            self._last_system_theme = self.sm.theme
+        else:
+            self._last_system_theme = None
         # Update root window background
         self.root.configure(bg=self.p.bg_primary)
         # Rebuild UI with new colors
@@ -237,6 +246,24 @@ class SpotlightUI:
             widget.destroy()
         self._build_widgets()
         self.anim = AnimationEngine(self.root)
+
+    def _poll_system_theme(self):
+        """Periodically check if the Windows system theme changed and auto-switch."""
+        if self._config_theme == 'system':
+            from system_theme import get_system_theme
+            current = get_system_theme()
+            if self._last_system_theme and current != self._last_system_theme:
+                # System theme changed — switch without rebuilding settings
+                self._last_system_theme = current
+                self.sm.set_theme('system')  # re-resolves to new theme
+                self.p = self.sm.palette
+                self.root.configure(bg=self.p.bg_primary)
+                for widget in self.root.winfo_children():
+                    widget.destroy()
+                self._build_widgets()
+                self.anim = AnimationEngine(self.root)
+        # Poll every 10 seconds
+        self.root.after(10000, self._poll_system_theme)
 
     # ── 新用户引导 ──
 
@@ -741,4 +768,7 @@ class SpotlightUI:
 
     def run(self):
         self.root.withdraw()
+        # Start system theme polling if using "system" theme
+        if self._config_theme == 'system':
+            self.root.after(10000, self._poll_system_theme)
         self.root.mainloop()

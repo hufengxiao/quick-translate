@@ -225,7 +225,7 @@ class StyleManager:
     }
 
     def __init__(self, theme: str = 'dark'):
-        self._theme = theme if theme in self.THEMES else 'dark'
+        self._theme = self._resolve_theme(theme)
         self.spacing = Spacing()
         self.radius = Radius()
         self.animation = Animation()
@@ -236,6 +236,16 @@ class StyleManager:
             mono='Consolas',
         )
 
+    @staticmethod
+    def _resolve_theme(theme: str) -> str:
+        """Resolve 'system' to actual theme name, pass others through."""
+        if theme == 'system':
+            from system_theme import get_system_theme
+            return get_system_theme()
+        if theme in StyleManager.THEMES:
+            return theme
+        return 'dark'
+
     @property
     def palette(self) -> ColorPalette:
         return self.THEMES.get(self._theme, DARK_PALETTE)
@@ -245,8 +255,8 @@ class StyleManager:
         return self._theme
 
     def set_theme(self, theme: str):
-        if theme in self.THEMES:
-            object.__setattr__(self, '_theme', theme)
+        resolved = self._resolve_theme(theme)
+        object.__setattr__(self, '_theme', resolved)
 
     def get_font(self, size_key: str, weight: str = 'normal') -> tuple:
         """获取 tkinter 字体元组"""
