@@ -120,6 +120,81 @@ class VocabularyBook:
             f.write(content)
         return path
 
+    def random_quiz(self, num_choices: int = 4) -> dict:
+        """随机抽取生词生成测试题。
+
+        Returns a dict with:
+            question_word: str — the word to quiz on
+            question_definition: str — the definition shown as the prompt
+            correct_word: str — the correct word (same as question_word)
+            choices: list[str] — shuffled list of word choices (includes correct)
+            answer_index: int — index of the correct answer in choices
+        Returns None if vocabulary has fewer than 2 entries.
+        """
+        import random
+        if len(self.entries) < 2:
+            return None
+        # Pick a random entry as the question
+        entry = random.choice(self.entries)
+        word = entry.get("word", "")
+        definition = entry.get("definition", "")
+        if not word:
+            return None
+        # Pick distractors (other words)
+        other_words = [e["word"] for e in self.entries if e.get("word") != word]
+        num_distractors = min(num_choices - 1, len(other_words))
+        distractors = random.sample(other_words, num_distractors)
+        # Build choices and shuffle
+        choices = [word] + distractors
+        random.shuffle(choices)
+        answer_index = choices.index(word)
+        return {
+            "question_word": word,
+            "question_definition": definition,
+            "correct_word": word,
+            "choices": choices,
+            "answer_index": answer_index,
+        }
+
+    def random_review(self, count: int = 10) -> list:
+        """随机抽取多个生词生成一组测试题。
+
+        Args:
+            count: number of quiz questions to generate (max = len(entries))
+
+        Returns:
+            list of quiz dicts (same format as random_quiz)
+        """
+        import random
+        if len(self.entries) < 2:
+            return []
+        actual_count = min(count, len(self.entries))
+        # Pick unique words for the review session
+        sampled = random.sample(self.entries, actual_count)
+        quizzes = []
+        seen_words = set()
+        for entry in sampled:
+            word = entry.get("word", "")
+            if not word or word in seen_words:
+                continue
+            seen_words.add(word)
+            # Build a quiz for this word
+            other_words = [e["word"] for e in self.entries if e.get("word") != word]
+            num_distractors = min(3, len(other_words))
+            if num_distractors == 0:
+                continue
+            distractors = random.sample(other_words, num_distractors)
+            choices = [word] + distractors
+            random.shuffle(choices)
+            quizzes.append({
+                "question_word": word,
+                "question_definition": entry.get("definition", ""),
+                "correct_word": word,
+                "choices": choices,
+                "answer_index": choices.index(word),
+            })
+        return quizzes
+
     @property
     def count(self) -> int:
         return len(self.entries)

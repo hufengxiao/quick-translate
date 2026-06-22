@@ -462,6 +462,64 @@ def test_vocabulary_export():
 test("Vocabulary Export", test_vocabulary_export)
 
 
+# 19. Vocabulary Review (random quiz)
+def test_vocabulary_review():
+    from vocabulary import VocabularyBook
+    import tempfile, os
+    tmpdir = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdir, "vocabulary.json")
+    vb = VocabularyBook.__new__(VocabularyBook)
+    vb.max_size = 500
+    vb.entries = []
+    vb.file_path = tmpfile
+
+    # Too few entries — should return None / []
+    vb.add("hello", "你好")
+    assert vb.random_quiz() is None
+    assert vb.random_review() == []
+
+    # Add more words
+    vb.add("world", "世界")
+    vb.add("apple", "苹果")
+    vb.add("banana", "香蕉")
+    vb.add("cat", "猫")
+
+    # random_quiz
+    quiz = vb.random_quiz(num_choices=4)
+    assert quiz is not None
+    assert quiz["correct_word"] in [e["word"] for e in vb.entries]
+    assert len(quiz["choices"]) == 4
+    assert quiz["choices"][quiz["answer_index"]] == quiz["correct_word"]
+    assert quiz["question_definition"] != ""
+
+    # random_review
+    reviews = vb.random_review(count=3)
+    assert len(reviews) == 3
+    for r in reviews:
+        assert r["correct_word"] in [e["word"] for e in vb.entries]
+        assert r["choices"][r["answer_index"]] == r["correct_word"]
+        assert len(r["choices"]) >= 2  # at least correct + 1 distractor
+
+    # random_review count > entries — should cap at entry count
+    reviews2 = vb.random_review(count=100)
+    assert len(reviews2) == 5  # only 5 entries
+
+    # All quiz words should be unique in a review session
+    quiz_words = [r["question_word"] for r in reviews2]
+    assert len(quiz_words) == len(set(quiz_words))
+
+    # Verify answer_index is valid for every quiz
+    for r in reviews2:
+        assert 0 <= r["answer_index"] < len(r["choices"])
+        assert r["choices"][r["answer_index"]] == r["correct_word"]
+
+    import shutil
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+test("Vocabulary Review", test_vocabulary_review)
+
+
 # 14. Startup benchmark
 def test_startup():
     import subprocess
