@@ -29,14 +29,28 @@ class Easing:
 class AnimationEngine:
     """动画引擎"""
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, speed: float = 1.0):
         self.root = root
         self._running = False
+        self._speed = speed  # multiplier: <1 = faster, >1 = slower
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @speed.setter
+    def speed(self, value: float):
+        self._speed = max(0.1, min(5.0, value))
+
+    def _scaled_duration(self, duration: int) -> int:
+        """Apply speed multiplier to duration. Lower speed = faster animation."""
+        return max(1, int(duration * self._speed))
 
     def fade_in(self, widget: tk.Tk, duration: int = 200,
                 from_alpha: float = 0.0, to_alpha: float = 1.0,
                 on_complete: Optional[Callable] = None):
         """淡入动画"""
+        duration = self._scaled_duration(duration)
         steps = max(10, duration // 16)
         step_time = duration // steps
         delta = (to_alpha - from_alpha) / steps
@@ -68,6 +82,7 @@ class AnimationEngine:
                            duration: int = 200, offset: int = -20,
                            on_complete: Optional[Callable] = None):
         """从上方滑入"""
+        duration = self._scaled_duration(duration)
         steps = max(10, duration // 16)
         step_time = duration // steps
         start_y = target_y + offset
@@ -107,6 +122,7 @@ class AnimationEngine:
     def pulse(self, widget: tk.Widget, color_from: str, color_to: str,
               duration: int = 1000, cycles: int = 0):
         """脉冲动画（用于加载指示器）"""
+        duration = self._scaled_duration(duration)
         steps = max(20, duration // 16)
         step_time = duration // steps
         current_step = [0]

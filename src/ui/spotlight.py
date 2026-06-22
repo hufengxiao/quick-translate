@@ -120,7 +120,7 @@ class SpotlightUI:
 
         self._build_window()
         self._build_widgets()
-        self._animator = Animator(self.root)
+        self._animator = Animator(self.root, speed=self.cfg.ui.animation_speed)
 
     # -- Window Setup --
 

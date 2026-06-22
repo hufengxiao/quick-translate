@@ -20,6 +20,7 @@ DEFAULT_CONFIG = {
         "entry_bg": "#313244",
         "list_bg": "#181825",
         "highlight_bg": "#45475a",
+        "animation_speed": 1.0,
     },
     "ai": {
         "enabled": True,

@@ -93,7 +93,7 @@ class SpotlightUI:
 
         self._build_window()
         self._build_widgets()
-        self.anim = AnimationEngine(self.root)
+        self.anim = AnimationEngine(self.root, speed=self.cfg.get("ui", {}).get("animation_speed", 1.0))
 
     def _build_window(self):
         self.root = tk.Tk()
@@ -345,7 +345,7 @@ class SpotlightUI:
             for widget in self.root.winfo_children():
                 widget.destroy()
             self._build_widgets()
-            self.anim = AnimationEngine(self.root)
+            self.anim = AnimationEngine(self.root, speed=new_cfg.get("ui", {}).get("animation_speed", 1.0))
             self._show_toast("设置已保存 ✓", 1500)
 
         def _on_theme_change(theme_name):
@@ -383,7 +383,7 @@ class SpotlightUI:
         for widget in self.root.winfo_children():
             widget.destroy()
         self._build_widgets()
-        self.anim = AnimationEngine(self.root)
+        self.anim = AnimationEngine(self.root, speed=self.cfg.get("ui", {}).get("animation_speed", 1.0))
 
     def _on_font_size_change(self, delta: int):
         """Ctrl+/- 调整字体大小并重建 UI"""
@@ -397,7 +397,7 @@ class SpotlightUI:
         for widget in self.root.winfo_children():
             widget.destroy()
         self._build_widgets()
-        self.anim = AnimationEngine(self.root)
+        self.anim = AnimationEngine(self.root, speed=self.cfg.get("ui", {}).get("animation_speed", 1.0))
         # Persist
         from config import save_config
         save_config(self.cfg)
@@ -418,7 +418,7 @@ class SpotlightUI:
                 for widget in self.root.winfo_children():
                     widget.destroy()
                 self._build_widgets()
-                self.anim = AnimationEngine(self.root)
+                self.anim = AnimationEngine(self.root, speed=self.cfg.get("ui", {}).get("animation_speed", 1.0))
         # Poll every 10 seconds
         self.root.after(10000, self._poll_system_theme)
 

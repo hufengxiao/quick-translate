@@ -49,6 +49,7 @@ class UIConfig:
     # Apple-style extras
     corner_radius: int = 12
     animations_enabled: bool = True
+    animation_speed: float = 1.0
     shadow_enabled: bool = True
 
 
@@ -115,6 +116,9 @@ class AppConfig:
             self.ui.opacity = max(0.1, min(1.0, self.ui.opacity))
         if self.ui.font_size < 8 or self.ui.font_size > 24:
             warnings.append(f"ui.font_size={self.ui.font_size} unusual, expected 8-24")
+        if not (0.1 <= self.ui.animation_speed <= 5.0):
+            warnings.append(f"ui.animation_speed={self.ui.animation_speed} out of range [0.1, 5.0], clamping")
+            self.ui.animation_speed = max(0.1, min(5.0, self.ui.animation_speed))
         if self.dictionary.preload_count < 100:
             warnings.append("dictionary.preload_count < 100, search quality may be poor")
         if self.ai.enabled and not self.ai.api_key:

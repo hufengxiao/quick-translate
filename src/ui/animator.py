@@ -37,9 +37,22 @@ def linear(t: float) -> float:
 class Animator:
     """Animation controller for a tkinter root window."""
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, speed: float = 1.0) -> None:
         self._root = root
         self._running: dict[str, bool] = {}
+        self._speed = speed  # multiplier: <1 = faster, >1 = slower
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @speed.setter
+    def speed(self, value: float):
+        self._speed = max(0.1, min(5.0, value))
+
+    def _scaled_duration(self, duration_ms: int) -> int:
+        """Apply speed multiplier to duration."""
+        return max(1, int(duration_ms * self._speed))
 
     def animate(self, name: str, duration_ms: int,
                 on_frame: Callable[[float], None],
@@ -96,6 +109,7 @@ class Animator:
     def fade_in(self, name: str, target_alpha: float = 0.96,
                 duration_ms: int = 200, on_complete: Optional[Callable] = None) -> None:
         """Fade window in from transparent to target_alpha."""
+        duration_ms = self._scaled_duration(duration_ms)
         start_alpha = 0.0
         def on_frame(t: float):
             alpha = start_alpha + (target_alpha - start_alpha) * t
@@ -105,6 +119,7 @@ class Animator:
     def fade_out(self, name: str, duration_ms: int = 150,
                  on_complete: Optional[Callable] = None) -> None:
         """Fade window out to transparent."""
+        duration_ms = self._scaled_duration(duration_ms)
         try:
             start_alpha = self._root.attributes("-alpha")
         except Exception:
@@ -118,6 +133,7 @@ class Animator:
                      end_w: int, end_h: int, center_x: int, center_y: int,
                      duration_ms: int = 200, on_complete: Optional[Callable] = None) -> None:
         """Scale window from start size to end size, centered on (center_x, center_y)."""
+        duration_ms = self._scaled_duration(duration_ms)
         def on_frame(t: float):
             w = int(start_w + (end_w - start_w) * t)
             h = int(start_h + (end_h - start_h) * t)

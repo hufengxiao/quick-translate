@@ -190,6 +190,21 @@ class SettingsPanel:
             bd=0, font=("Segoe UI", 9),
         ).pack(fill=tk.X)
 
+        # 动画速度
+        self._label("动画速度 (倍率)")
+        anim_var = tk.DoubleVar(value=self.cfg.get("ui", {}).get("animation_speed", 1.0))
+        self._vars["ui.animation_speed"] = anim_var
+        anim_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
+        anim_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
+        tk.Scale(
+            anim_frame, from_=0.25, to=3.0, resolution=0.25,
+            orient=tk.HORIZONTAL, variable=anim_var,
+            bg=self.p.bg_tertiary, fg=self.p.text_primary,
+            highlightthickness=0, troughcolor=self.p.bg_primary,
+            sliderrelief=tk.FLAT, length=220, showvalue=True,
+            bd=0, font=("Segoe UI", 9),
+        ).pack(fill=tk.X)
+
     def _build_hotkey_section(self):
         self._section_header("快捷键")
 
@@ -367,6 +382,7 @@ class SettingsPanel:
         ui["theme"] = self._vars["ui.theme"].get()
         ui["opacity"] = round(self._vars["ui.opacity"].get(), 2)
         ui["font_size"] = self._vars["ui.font_size"].get()
+        ui["animation_speed"] = round(self._vars["ui.animation_speed"].get(), 2)
 
         # 热键
         hk["shift"] = self._vars["hotkey.shift"].get()
@@ -394,6 +410,7 @@ class SettingsPanel:
         self._vars["ui.theme"].set("dark")
         self._vars["ui.opacity"].set(0.95)
         self._vars["ui.font_size"].set(13)
+        self._vars["ui.animation_speed"].set(1.0)
         self._vars["hotkey.shift"].set(True)
         self._vars["hotkey.ctrl"].set(True)
         self._vars["hotkey.alt"].set(False)
