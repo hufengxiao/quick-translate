@@ -28,6 +28,18 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
+; ── Custom installer appearance ──
+WizardImageFile=data\installer\wizard.bmp
+WizardSmallImageFile=data\installer\small.bmp
+SetupLogging=yes
+DisableWelcomePage=no
+WizardSizePercent=100
+
+; ── Brand colors (match app accent #0A84FF) ──
+BackColor=$0A84FF
+BackColor2=$1C1C1E
+WindowVisible=yes
+
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
@@ -38,6 +50,8 @@ Name: "startupicon"; Description: "Start with Windows"; GroupDescription: "Start
 
 [Files]
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "data\installer\wizard.bmp"; DestDir: "{app}\installer"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "data\installer\small.bmp"; DestDir: "{app}\installer"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -57,6 +71,9 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Kill process on uninstall
 Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runhidden
 
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\installer"
+
 [Code]
 // Kill running instance before install/upgrade
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -66,5 +83,31 @@ begin
   if CurStep = ssInstall then
   begin
     Exec('taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
+// Custom welcome page text
+procedure InitializeWizard;
+begin
+  WizardForm.WelcomeLabel2.Caption :=
+    'Quick Translate will be installed to the following folder:' + #13#10#13#10 +
+    'Features:' + #13#10 +
+    '  ' + Chr(8226) + ' Instant word lookup with MDX dictionary' + #13#10 +
+    '  ' + Chr(8226) + ' AI-powered translation (GPT, Claude, ...)' + #13#10 +
+    '  ' + Chr(8226) + ' Vocabulary book with Anki export' + #13#10 +
+    '  ' + Chr(8226) + ' Spell correction and fuzzy search' + #13#10 +
+    '  ' + Chr(8226) + ' Clipboard monitoring auto-translate' + #13#10#13#10 +
+    'Click Next to continue.';
+end;
+
+// Custom finished page text
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
+  begin
+    WizardForm.FinishedLabel.Caption :=
+      'Quick Translate has been installed successfully.' + #13#10#13#10 +
+      'Press ' + Chr(8220) + 'Alt+M' + Chr(8221) + ' to open the translation window, ' +
+      'or right-click the system tray icon for options.';
   end;
 end;

@@ -23,4 +23,5 @@ data/dict/oxford10.db
 build/
 dist/
 *.spec.bak
-installer/
+/installer/
+!data/installer/
