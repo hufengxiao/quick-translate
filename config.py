@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
         "monitor_enabled": False,
         "min_length": 2,
     },
+    "language": "zh",  # zh / en
     "autostart": {
         "enabled": False,
     },

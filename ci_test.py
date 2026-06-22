@@ -1374,7 +1374,54 @@ def test_system_notification():
 test("System Notification", test_system_notification)
 
 
-print(f"\nResults: {33 - len(errors)} passed / {len(errors)} failed")
+# 34. I18n (多语言界面)
+def test_i18n():
+    from src.i18n import t, set_language, get_language, _TRANSLATIONS
+
+    # Both languages should have the same keys
+    zh_keys = set(_TRANSLATIONS["zh"].keys())
+    en_keys = set(_TRANSLATIONS["en"].keys())
+    assert zh_keys == en_keys, f"Key mismatch: zh-only={zh_keys - en_keys}, en-only={en_keys - zh_keys}"
+
+    # set_language / get_language
+    set_language("zh")
+    assert get_language() == "zh"
+    set_language("en")
+    assert get_language() == "en"
+    set_language("zh")  # restore
+
+    # t() returns correct text in each language
+    set_language("zh")
+    assert t("cancel") == "取消"
+    assert t("search_placeholder") == "输入单词开始查询…"
+    assert t("no_local_definition") == "未找到本地释义"
+    assert t("ai_no_providers") == "没有可用的 AI 模型"
+
+    set_language("en")
+    assert t("cancel") == "Cancel"
+    assert t("search_placeholder") == "Type a word to search\u2026"
+    assert t("no_local_definition") == "No local definition"
+    assert t("ai_no_providers") == "No AI models available"
+
+    # Format args
+    assert t("error_detail", "timeout") == "Error: timeout"
+    assert t("ai_all_failed", "err1") == "All AI models failed:\nerr1"
+
+    # Unknown key returns the key itself
+    assert t("nonexistent_key_xyz") == "nonexistent_key_xyz"
+
+    # Invalid language is ignored (stays English)
+    set_language("fr")
+    assert get_language() == "en"  # fr not in translations, stays en
+    assert t("cancel") == "Cancel"
+
+    set_language("zh")  # restore
+
+
+test("I18n", test_i18n)
+
+
+print(f"\nResults: {34 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

@@ -147,6 +147,7 @@ class AppConfig:
     context_menu: ContextMenuConfig = field(default_factory=ContextMenuConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     window_position: dict = field(default_factory=dict)
+    language: str = "zh"  # zh / en
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -220,6 +221,8 @@ def _dict_to_config(d: dict) -> AppConfig:
                 setattr(cfg.logging, k, v)
     if "window_position" in d:
         cfg.window_position = d["window_position"]
+    if "language" in d and isinstance(d["language"], str):
+        cfg.language = d["language"]
     return cfg
 
 

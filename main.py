@@ -129,6 +129,10 @@ def main():
 
     cfg = load_config()
 
+    # 初始化语言
+    from src.i18n import set_language, t as _t
+    set_language(cfg.get("language", "zh"))
+
     import tkinter as tk
 
     # 错误处理器
@@ -200,10 +204,10 @@ def main():
     # 翻译函数（自动保存翻译结果到历史）
     def translate(text, callback, error_callback):
         if not ai.is_configured:
-            error_callback("AI 翻译未配置")
+            error_callback(_t("ai_not_configured"))
             return
         if not cfg["ai"]["enabled"]:
-            error_callback("AI 翻译已禁用")
+            error_callback(_t("ai_disabled"))
             return
 
         def wrapped_callback(result):
@@ -276,8 +280,8 @@ def main():
             print(f"[QuickTranslate] 发现新版本 v{version}: {url}")
             try:
                 tray.show_notification(
-                    "Quick Translate — 发现新版本",
-                    f"新版本 v{version} 已发布！点击查看详情",
+                    _t("new_version_title"),
+                    _t("new_version_body", version),
                     timeout_ms=15000,
                 )
             except Exception:

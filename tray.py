@@ -240,10 +240,11 @@ class SystemTrayIcon:
         print("[Tray] Stopped")
 
     def _show_menu(self, hwnd):
+        from src.i18n import t
         menu = user32.CreatePopupMenu()
-        user32.AppendMenuW(menu, 0, 1001, "显示/隐藏")
+        user32.AppendMenuW(menu, 0, 1001, t("tray_show_hide"))
         user32.AppendMenuW(menu, 0x00000800, 0, None)
-        user32.AppendMenuW(menu, 0, 1002, "退出")
+        user32.AppendMenuW(menu, 0, 1002, t("tray_exit"))
 
         pt = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(pt))

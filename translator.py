@@ -204,7 +204,8 @@ class MultiAITranslator:
         """尝试所有 provider 直到成功或全部失败"""
         if not self._translators:
             if error_callback:
-                error_callback("没有可用的 AI 模型")
+                from src.i18n import t
+                error_callback(t("ai_no_providers"))
             with self._lock:
                 self._busy = False
             return
@@ -230,7 +231,8 @@ class MultiAITranslator:
 
         # All providers failed
         if error_callback:
-            error_callback("所有 AI 模型都失败:\n" + "\n".join(errors))
+            from src.i18n import t
+            error_callback(t("ai_all_failed", "\n".join(errors)))
         with self._lock:
             self._busy = False
 

@@ -6,6 +6,7 @@ import tkinter as tk
 import ctypes
 from src.utils.autostart import set_autostart, is_autostart_enabled
 from src.utils.context_menu import is_installed as is_context_menu_installed, set_enabled as set_context_menu_enabled
+from src.i18n import t, set_language
 
 
 class SettingsPanel:
@@ -44,7 +45,7 @@ class SettingsPanel:
 
         win = tk.Toplevel(self.parent)
         self.win = win
-        win.title("设置")
+        win.title(t("settings"))
         win.overrideredirect(True)
         win.attributes("-topmost", True)
         win.attributes("-alpha", 0.96)
@@ -79,7 +80,7 @@ class SettingsPanel:
         title_bar.pack(fill=tk.X)
         title_bar.pack_propagate(False)
 
-        tk.Label(title_bar, text="  ⚙ 设置", font=("Segoe UI", 12, "bold"),
+        tk.Label(title_bar, text=t("settings"), font=("Segoe UI", 12, "bold"),
                  bg=self.p.bg_primary, fg=self.p.text_primary,
                  anchor="w").pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
@@ -116,6 +117,7 @@ class SettingsPanel:
         canvas.bind_all("<MouseWheel>", _on_mousewheel, add="+")
 
         # ── 构建各分组 ──
+        self._build_language_section()
         self._build_appearance_section()
         self._build_hotkey_section()
         self._build_ai_section()
@@ -128,13 +130,13 @@ class SettingsPanel:
         btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
         btn_frame.pack_propagate(False)
 
-        cancel_btn = self._make_button(btn_frame, "取消", self._close)
+        cancel_btn = self._make_button(btn_frame, t("cancel"), self._close)
         cancel_btn.pack(side=tk.RIGHT, padx=(0, 12), pady=8)
 
-        save_btn = self._make_button(btn_frame, "保存", self._save, accent=True)
+        save_btn = self._make_button(btn_frame, t("save"), self._save, accent=True)
         save_btn.pack(side=tk.RIGHT, padx=(0, 6), pady=8)
 
-        reset_btn = self._make_button(btn_frame, "恢复默认", self._reset_defaults)
+        reset_btn = self._make_button(btn_frame, t("reset_defaults"), self._reset_defaults)
         reset_btn.pack(side=tk.LEFT, padx=12, pady=8)
 
         # 关闭行为
@@ -144,16 +146,33 @@ class SettingsPanel:
 
     # ── 分组构建 ──
 
+    def _build_language_section(self):
+        self._section_header(t("language"))
+
+        lang_var = tk.StringVar(value=self.cfg.get("language", "zh"))
+        self._vars["language"] = lang_var
+        lang_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
+        lang_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
+        for text, val in [("中文", "zh"), ("English", "en")]:
+            rb = tk.Radiobutton(
+                lang_frame, text=text, variable=lang_var, value=val,
+                font=("Segoe UI", 10), bg=self.p.bg_tertiary,
+                fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
+                activebackground=self.p.bg_tertiary,
+                activeforeground=self.p.accent_primary,
+            )
+            rb.pack(side=tk.LEFT, padx=(0, 12))
+
     def _build_appearance_section(self):
-        self._section_header("外观")
+        self._section_header(t("appearance"))
 
         # 主题
-        self._label("主题")
+        self._label(t("theme"))
         theme_var = tk.StringVar(value=self.cfg.get("ui", {}).get("theme", "dark"))
         self._vars["ui.theme"] = theme_var
         theme_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
         theme_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
-        for text, val in [("跟随系统", "system"), ("深色", "dark"), ("浅色", "light"), ("高对比", "high_contrast")]:
+        for text, val in [(t("theme_system"), "system"), (t("theme_dark"), "dark"), (t("theme_light"), "light"), (t("theme_high_contrast"), "high_contrast")]:
             rb = tk.Radiobutton(
                 theme_frame, text=text, variable=theme_var, value=val,
                 font=("Segoe UI", 10), bg=self.p.bg_tertiary,
@@ -165,7 +184,7 @@ class SettingsPanel:
             rb.pack(side=tk.LEFT, padx=(0, 12))
 
         # 透明度
-        self._label("透明度")
+        self._label(t("opacity"))
         opacity_var = tk.DoubleVar(value=self.cfg.get("ui", {}).get("opacity", 0.95))
         self._vars["ui.opacity"] = opacity_var
         opacity_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
@@ -180,7 +199,7 @@ class SettingsPanel:
         ).pack(fill=tk.X)
 
         # 字体大小
-        self._label("字体大小")
+        self._label(t("font_size"))
         font_var = tk.IntVar(value=self.cfg.get("ui", {}).get("font_size", 13))
         self._vars["ui.font_size"] = font_var
         font_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
@@ -195,7 +214,7 @@ class SettingsPanel:
         ).pack(fill=tk.X)
 
         # 动画速度
-        self._label("动画速度 (倍率)")
+        self._label(t("animation_speed"))
         anim_var = tk.DoubleVar(value=self.cfg.get("ui", {}).get("animation_speed", 1.0))
         self._vars["ui.animation_speed"] = anim_var
         anim_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
@@ -210,7 +229,7 @@ class SettingsPanel:
         ).pack(fill=tk.X)
 
     def _build_hotkey_section(self):
-        self._section_header("快捷键")
+        self._section_header(t("hotkey"))
 
         hk = self.cfg.get("hotkey", {})
 
@@ -235,7 +254,7 @@ class SettingsPanel:
             cb.pack(side=tk.LEFT, padx=(0, 12))
 
         # 按键
-        self._label("触发键")
+        self._label(t("trigger_key"))
         key_var = tk.StringVar(value=hk.get("key", "m"))
         self._vars["hotkey.key"] = key_var
         key_entry = tk.Entry(
@@ -249,12 +268,12 @@ class SettingsPanel:
         key_entry.pack(padx=16, pady=(0, 8), anchor="w")
 
         # 提示
-        tk.Label(self._content, text="修改后需重启程序生效",
+        tk.Label(self._content, text=t("hotkey_restart_hint"),
                  font=("Segoe UI", 9), bg=self.p.bg_tertiary,
                  fg=self.p.text_tertiary).pack(padx=16, pady=(0, 8), anchor="w")
 
     def _build_ai_section(self):
-        self._section_header("AI 翻译")
+        self._section_header(t("ai_translation"))
 
         ai = self.cfg.get("ai", {})
 
@@ -262,7 +281,7 @@ class SettingsPanel:
         enabled_var = tk.BooleanVar(value=ai.get("enabled", True))
         self._vars["ai.enabled"] = enabled_var
         cb = tk.Checkbutton(
-            self._content, text="启用 AI 翻译", variable=enabled_var,
+            self._content, text=t("enable_ai"), variable=enabled_var,
             font=("Segoe UI", 10), bg=self.p.bg_tertiary,
             fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
             activebackground=self.p.bg_tertiary,
@@ -271,25 +290,25 @@ class SettingsPanel:
         cb.pack(padx=16, pady=(0, 8), anchor="w")
 
         # API 地址
-        self._label("API 地址")
+        self._label(t("api_base"))
         base_var = tk.StringVar(value=ai.get("api_base", ""))
         self._vars["ai.api_base"] = base_var
         self._entry(base_var)
 
         # API 密钥
-        self._label("API 密钥")
+        self._label(t("api_key"))
         key_var = tk.StringVar(value=ai.get("api_key", ""))
         self._vars["ai.api_key"] = key_var
         self._entry(key_var, show="•")
 
         # 模型
-        self._label("模型")
+        self._label(t("model"))
         model_var = tk.StringVar(value=ai.get("model", ""))
         self._vars["ai.model"] = model_var
         self._entry(model_var)
 
     def _build_clipboard_section(self):
-        self._section_header("剪贴板")
+        self._section_header(t("clipboard"))
 
         clip = self.cfg.get("clipboard", {})
 
@@ -297,7 +316,7 @@ class SettingsPanel:
         mon_var = tk.BooleanVar(value=clip.get("monitor_enabled", False))
         self._vars["clipboard.monitor_enabled"] = mon_var
         cb = tk.Checkbutton(
-            self._content, text="监听剪贴板自动翻译", variable=mon_var,
+            self._content, text=t("clipboard_monitor"), variable=mon_var,
             font=("Segoe UI", 10), bg=self.p.bg_tertiary,
             fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
             activebackground=self.p.bg_tertiary,
@@ -306,7 +325,7 @@ class SettingsPanel:
         cb.pack(padx=16, pady=(0, 8), anchor="w")
 
         # 最小长度
-        self._label("最小字符数")
+        self._label(t("min_chars"))
         min_var = tk.IntVar(value=clip.get("min_length", 2))
         self._vars["clipboard.min_length"] = min_var
         min_frame = tk.Frame(self._content, bg=self.p.bg_tertiary)
@@ -321,7 +340,7 @@ class SettingsPanel:
         ).pack(fill=tk.X)
 
     def _build_autostart_section(self):
-        self._section_header("启动")
+        self._section_header(t("startup"))
 
         # 检测实际注册表状态
         current_state = is_autostart_enabled()
@@ -329,7 +348,7 @@ class SettingsPanel:
         self._vars["autostart.enabled"] = autostart_var
 
         cb = tk.Checkbutton(
-            self._content, text="开机自启动", variable=autostart_var,
+            self._content, text=t("autostart"), variable=autostart_var,
             font=("Segoe UI", 10), bg=self.p.bg_tertiary,
             fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
             activebackground=self.p.bg_tertiary,
@@ -337,12 +356,12 @@ class SettingsPanel:
         )
         cb.pack(padx=16, pady=(0, 4), anchor="w")
 
-        tk.Label(self._content, text="开启后 Windows 启动时自动运行",
+        tk.Label(self._content, text=t("autostart_hint"),
                  font=("Segoe UI", 9), bg=self.p.bg_tertiary,
                  fg=self.p.text_tertiary).pack(padx=16, pady=(0, 12), anchor="w")
 
     def _build_context_menu_section(self):
-        self._section_header("右键菜单")
+        self._section_header(t("context_menu"))
 
         # 检测实际注册表状态
         current_state = is_context_menu_installed()
@@ -350,7 +369,7 @@ class SettingsPanel:
         self._vars["context_menu.enabled"] = ctx_var
 
         cb = tk.Checkbutton(
-            self._content, text="添加右键菜单翻译", variable=ctx_var,
+            self._content, text=t("context_menu_enable"), variable=ctx_var,
             font=("Segoe UI", 10), bg=self.p.bg_tertiary,
             fg=self.p.text_primary, selectcolor=self.p.bg_elevated,
             activebackground=self.p.bg_tertiary,
@@ -358,7 +377,7 @@ class SettingsPanel:
         )
         cb.pack(padx=16, pady=(0, 4), anchor="w")
 
-        tk.Label(self._content, text="右键文件/文件夹时显示\"用 Quick Translate 翻译\"",
+        tk.Label(self._content, text=t("context_menu_hint"),
                  font=("Segoe UI", 9), bg=self.p.bg_tertiary,
                  fg=self.p.text_tertiary).pack(padx=16, pady=(0, 12), anchor="w")
 
@@ -425,6 +444,11 @@ class SettingsPanel:
         clip = self.cfg.setdefault("clipboard", {})
         ctx = self.cfg.setdefault("context_menu", {})
 
+        # 语言
+        new_lang = self._vars["language"].get()
+        self.cfg["language"] = new_lang
+        set_language(new_lang)
+
         # 外观
         ui["theme"] = self._vars["ui.theme"].get()
         ui["opacity"] = round(self._vars["ui.opacity"].get(), 2)
@@ -464,6 +488,7 @@ class SettingsPanel:
 
     def _reset_defaults(self):
         """恢复所有设置为默认值"""
+        self._vars["language"].set("zh")
         self._vars["ui.theme"].set("dark")
         self._vars["ui.opacity"].set(0.95)
         self._vars["ui.font_size"].set(13)

@@ -10,6 +10,7 @@ from styles import StyleManager
 from animations import AnimationEngine
 from settings_panel import SettingsPanel
 from src.utils.monitor import clamp_position, get_monitor_rects
+from src.i18n import t, set_language
 
 # POS tag extraction pattern (same as src/ui/spotlight.py)
 _POS_PATTERN = re.compile(
@@ -72,6 +73,9 @@ class SpotlightUI:
         self.on_translate = on_translate
         self.history = history
         self.vocabulary = vocabulary
+
+        # 初始化语言
+        set_language(config.get("language", "zh"))
 
         # 设计系统
         theme_name = config.get("ui", {}).get("theme", "dark")
@@ -349,7 +353,7 @@ class SpotlightUI:
                 widget.destroy()
             self._build_widgets()
             self.anim = AnimationEngine(self.root, speed=new_cfg.get("ui", {}).get("animation_speed", 1.0))
-            self._show_toast("设置已保存 ✓", 1500)
+            self._show_toast(t("settings_saved"), 1500)
 
         def _on_theme_change(theme_name):
             """主题预览"""
@@ -405,7 +409,7 @@ class SpotlightUI:
         from config import save_config
         save_config(self.cfg)
         sign = "+" if delta > 0 else ""
-        self._show_toast(f"字体大小 {new_size} ({sign}{delta})", 1200)
+        self._show_toast(t("font_size_toast", new_size, f"{sign}{delta}"), 1200)
 
     def _poll_system_theme(self):
         """Periodically check if the Windows system theme changed and auto-switch."""
@@ -430,10 +434,10 @@ class SpotlightUI:
     def _show_guide(self):
         """首次启动引导 toast 序列"""
         tips = [
-            ("Shift+Ctrl+M 唤出窗口", 3000),
-            ("输入英文查词，↑↓ 选择", 3000),
-            ("Enter 查看详情 | Esc 返回", 3000),
-            ("Tab AI翻译 | 点击释义复制", 3000),
+            (t("guide_hotkey"), 3000),
+            (t("guide_search"), 3000),
+            (t("guide_enter_esc"), 3000),
+            (t("guide_tab_copy"), 3000),
         ]
         delay = 500
         for text, duration in tips:
@@ -540,7 +544,7 @@ class SpotlightUI:
 
         # 返回按钮（详情模式下显示）
         self._back_btn = tk.Label(
-            self._def_frame, text="← 返回列表",
+            self._def_frame, text=t("back_to_list"),
             font=("Segoe UI", 9), bg=p.bg_primary, fg=p.text_tertiary,
             cursor="hand2", anchor="w",
         )
@@ -550,7 +554,7 @@ class SpotlightUI:
         self._back_btn.bind("<Leave>", lambda e: self._back_btn.config(fg=p.text_tertiary))
 
         self.def_title = tk.Label(
-            self._def_frame, text="输入单词开始查询…",
+            self._def_frame, text=t("search_placeholder"),
             font=s.get_font('result_title', 'bold'),
             bg=p.bg_primary, fg=p.accent_primary, anchor="w",
         )
@@ -560,7 +564,7 @@ class SpotlightUI:
         self._bind_drag(self._title_row)
 
         self.def_title = tk.Label(
-            self._title_row, text="输入单词开始查询…",
+            self._title_row, text=t("search_placeholder"),
             font=s.get_font('result_title', 'bold'),
             bg=p.bg_primary, fg=p.accent_primary, anchor="w",
         )
@@ -670,7 +674,7 @@ class SpotlightUI:
             self._matches = self.on_search(query)
             self._update_listbox(query)
         except Exception as e:
-            self._set_definition("搜索出错", str(e))
+            self._set_definition(t("search_error"), str(e))
             traceback.print_exc()
 
     def _update_listbox(self, query: str = ""):
@@ -679,7 +683,7 @@ class SpotlightUI:
         self._ai_pending_query = None
 
         if not self._matches:
-            self.listbox.insert(tk.END, "  🤖 本地无结果，按 Enter AI 翻译")
+            self.listbox.insert(tk.END, t("no_local_results"))
             self._ai_pending_query = query
             return
 
@@ -722,9 +726,9 @@ class SpotlightUI:
                     if len(defn) > 18:
                         defn = defn[:18] + "…"
                     self.listbox.insert(tk.END, f"  🕐 {word}  {defn}  {time}")
-                self._set_definition("最近查词", "输入新的单词开始查询，或从历史中选择")
+                self._set_definition(t("recent_searches"), t("recent_search_hint"))
                 return
-        self._set_definition("输入单词开始查询…", "")
+        self._set_definition(t("search_placeholder"), "")
 
     # ── 键盘导航 ──
 
@@ -761,7 +765,7 @@ class SpotlightUI:
         return "break"
 
     def _trigger_ai(self, query: str):
-        self._set_definition("🤖 AI 翻译中…", f'正在翻译 "{query}"，请稍候…')
+        self._set_definition(t("ai_translating"), t("ai_translating_detail", query))
         self._show_detail_mode()
         self._current_detail_word = query
         self._update_fav_button()
@@ -769,10 +773,10 @@ class SpotlightUI:
         self.on_translate(query, self._on_ai_result, self._on_ai_error)
 
     def _on_ai_result(self, text: str):
-        self.root.after(0, lambda: self._set_definition("🤖 AI 翻译结果", text))
+        self.root.after(0, lambda: self._set_definition(t("ai_result"), text))
 
     def _on_ai_error(self, error: str):
-        self.root.after(0, lambda: self._set_definition("翻译失败", f"错误: {error}"))
+        self.root.after(0, lambda: self._set_definition(t("translation_failed"), t("error_detail", error)))
 
     # ── 列表交互 ──
 
@@ -806,7 +810,7 @@ class SpotlightUI:
         if 0 <= idx < len(self._matches):
             m = self._matches[idx]
             word = m["word"]
-            defn = m.get("text") or m.get("definition", "无释义")
+            defn = m.get("text") or m.get("definition", t("no_definition"))
             self._set_definition(word, defn)
             self._show_detail_mode()  # 切换到详情面板
             self._current_detail_word = word
@@ -835,9 +839,9 @@ class SpotlightUI:
         self._update_fav_button()
         self._update_star_button()
         if now_fav:
-            self._show_toast(f"已收藏 \"{word}\" ★", 1500)
+            self._show_toast(t("favorited", word), 1500)
         else:
-            self._show_toast(f"已取消收藏 \"{word}\"", 1500)
+            self._show_toast(t("unfavorited", word), 1500)
 
     def _on_toggle_star(self, event=None):
         """Toggle star status for the current word."""
@@ -852,9 +856,9 @@ class SpotlightUI:
         self._update_fav_button()
         self._update_star_button()
         if now_starred:
-            self._show_toast(f"已星标 \"{word}\" ◆", 1500)
+            self._show_toast(t("starred", word), 1500)
         else:
-            self._show_toast(f"已取消星标 \"{word}\"", 1500)
+            self._show_toast(t("unstarred", word), 1500)
 
     def _update_star_button(self):
         """Update the star button appearance based on current word."""
@@ -878,15 +882,15 @@ class SpotlightUI:
 
     def _on_copy_definition(self, event=None):
         title = self.def_title.cget("text")
-        skip_titles = ("输入单词开始查询…", "最近查词", "搜索出错",
-                        "翻译失败", "AI 翻译中…", "未找到本地释义")
-        if title in skip_titles or title.startswith("🤖"):
+        skip_titles = (t("search_placeholder"), t("recent_searches"), t("search_error"),
+                        t("translation_failed"), t("ai_translating"), t("no_local_definition"))
+        if title in skip_titles or title.startswith("\U0001f916"):
             return
         content = self.def_text.get("1.0", tk.END).strip()
-        if content and not content.startswith("输入新的单词"):
+        if content and not content.startswith(t("recent_search_hint")[:4]):
             self.root.clipboard_clear()
             self.root.clipboard_append(content)
-            self._show_toast("已复制到剪贴板 ✓", 1500)
+            self._show_toast(t("copied_to_clipboard"), 1500)
 
     # ── 窗口显隐 ──
 
