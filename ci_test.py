@@ -145,6 +145,39 @@ def test_dictionary():
     assert len(r3) == 0
 
 
+# 7b. Spell correction
+def test_spell_correction():
+    from dictionary import _levenshtein, Dictionary
+    # Test levenshtein function
+    assert _levenshtein("hello", "hello") == 0
+    assert _levenshtein("hello", "helllo") == 1  # extra 'l'
+    assert _levenshtein("hello", "helo") == 1    # missing 'l'
+    assert _levenshtein("hello", "hallo") == 1   # substitution
+    assert _levenshtein("hello", "world") == 4   # very different
+    assert _levenshtein("", "abc") == 3
+    assert _levenshtein("abc", "") == 3
+    assert _levenshtein("", "") == 0
+    # Test spell correction on Dictionary
+    from src.utils.config import load_config
+    cfg = load_config()
+    dp = cfg.dictionary.dict_path
+    if not os.path.isabs(dp):
+        dp = os.path.join(".", dp)
+    d = Dictionary(dp)
+    # "helllo" should find "hello" within edit distance 2
+    results = d.search_spell("helllo", tolerance=2, limit=5)
+    words = [r["word"] for r in results]
+    assert "hello" in words, f"'hello' not in spell results for 'helllo': {words}"
+    # "wrold" should find "world" within edit distance 2 (needs higher limit, many dist-2 words)
+    results2 = d.search_spell("wrold", tolerance=2, limit=50)
+    words2 = [r["word"] for r in results2]
+    assert "world" in words2, f"'world' not in spell results for 'wrold': {words2}"
+    # Integration: search_fuzzy should fall back to spell correction
+    results3 = d.search_fuzzy("helllo", limit=5)
+    words3 = [r["word"] for r in results3]
+    assert "hello" in words3, f"'hello' not in fuzzy results for 'helllo': {words3}"
+
+
 # 8. Theme
 def test_theme():
     from src.ui.theme import DARK, LIGHT, HIGH_CONTRAST, get_theme
@@ -207,6 +240,7 @@ test("TrieIndex", test_trie)
 test("BK-Tree", test_bktree)
 test("LRU Cache", test_lru)
 test("Dictionary", test_dictionary)
+test("Spell Correction", test_spell_correction)
 test("Theme", test_theme)
 test("Translator", test_translator)
 test("No TTS", test_no_tts)
@@ -258,7 +292,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {10 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {16 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

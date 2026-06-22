@@ -1,9 +1,38 @@
-"""本地词典查询模块 — MDX 原生词典 + JSON fallback"""
+"""本地词典查询模块 — MDX 原生词典 + JSON fallback + 拼写纠错"""
 import bisect
 import json
 import os
 import re
 from typing import List, Dict, Optional
+
+
+def _levenshtein(s: str, t: str) -> int:
+    """Compute Levenshtein edit distance between two strings.
+    Uses Wagner-Fischer algorithm with O(min(m,n)) space.
+    """
+    if s == t:
+        return 0
+    if not s:
+        return len(t)
+    if not t:
+        return len(s)
+    # Ensure s is the shorter string for space optimization
+    if len(s) > len(t):
+        s, t = t, s
+    m, n = len(s), len(t)
+    prev = list(range(m + 1))
+    curr = [0] * (m + 1)
+    for j in range(1, n + 1):
+        curr[0] = j
+        for i in range(1, m + 1):
+            cost = 0 if s[i - 1] == t[j - 1] else 1
+            curr[i] = min(
+                prev[i] + 1,        # deletion
+                curr[i - 1] + 1,    # insertion
+                prev[i - 1] + cost,  # substitution
+            )
+        prev, curr = curr, prev
+    return prev[m]
 
 
 class Dictionary:
@@ -12,6 +41,7 @@ class Dictionary:
     def __init__(self, dict_path: str, mdx_dict=None):
         self.entries: Dict[str, str] = {}
         self.sorted_keys: List[str] = []
+        self._len_index: Dict[int, List[str]] = {}  # length → [words] for spell correction
         self.dict_path = dict_path
         self._mdx = mdx_dict  # MDXDictionary instance (optional)
         self._cache: Dict[str, List[Dict]] = {}  # 查询缓存
@@ -30,6 +60,12 @@ class Dictionary:
             elif isinstance(data, list):
                 self.entries = {item["word"]: item["definition"] for item in data if "word" in item}
             self.sorted_keys = sorted(self.entries.keys())
+            # Build length index for fast spell correction
+            for w in self.sorted_keys:
+                wl = len(w)
+                if wl not in self._len_index:
+                    self._len_index[wl] = []
+                self._len_index[wl].append(w)
             print(f"[Dict] JSON fallback: {len(self.entries)} entries")
         except Exception as e:
             print(f"[Dict] Failed to load JSON: {e}")
@@ -115,11 +151,42 @@ class Dictionary:
                         if len(results) >= limit:
                             break
 
+        # 拼写纠错 fallback：当精确/前缀/包含搜索都无结果时
+        if not results:
+            spell_results = self.search_spell(query_lower, tolerance=2, limit=5)
+            if spell_results:
+                results = spell_results
+
         # 缓存
         if len(self._cache) >= self._cache_max:
             self._cache.pop(next(iter(self._cache)))
         self._cache[cache_key] = results
 
+        return results
+
+    def search_spell(self, query: str, tolerance: int = 2, limit: int = 5) -> List[Dict[str, str]]:
+        """拼写纠错：使用 Levenshtein 编辑距离查找相似词。
+        使用长度索引加速：只检查长度在 [len(query)-tolerance, len(query)+tolerance] 范围内的词。
+        """
+        if not query or not self._len_index:
+            return []
+        qlen = len(query)
+        candidates: List[str] = []
+        for wl in range(max(1, qlen - tolerance), qlen + tolerance + 1):
+            candidates.extend(self._len_index.get(wl, []))
+
+        # Compute edit distance for all candidates, sort by distance
+        scored = []
+        for word in candidates:
+            d = _levenshtein(query, word)
+            if d <= tolerance:
+                scored.append((d, word))
+        scored.sort(key=lambda x: x[0])
+
+        results = []
+        for d, word in scored[:limit]:
+            entry = {"word": word, "definition": self.entries.get(word, ""), "spell_distance": d}
+            results.append(entry)
         return results
 
     def lookup(self, word: str) -> Optional[str]:
