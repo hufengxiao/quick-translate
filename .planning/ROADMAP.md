@@ -56,15 +56,15 @@
 - [x] 搜索结果按相关度排序（exact > prefix > contains）
 - [x] 候选列表显示词性标签（n. v. adj.）
 
-### Phase 7: Word Management
+### Phase 7: Word Management ✅
 **Goal:** 生词本和收藏功能
-**Status:** PLANNED
+**Status:** DONE
 
 - [x] 生词本：一键收藏单词到生词本
 - [x] 生词本导出：导出为 CSV/Anki 格式
 - [x] 生词本复习：随机抽取生词测试
 - [x] 星标词汇：重要单词加星标置顶
-- [ ] 查词统计：显示每日/每周查词数量
+- [x] 查词统计：显示每日/每周查词数量
 
 ### Phase 8: UI Enhancements
 **Goal:** 界面更精致，交互更流畅
