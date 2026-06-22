@@ -895,7 +895,119 @@ def test_translation_cache():
 test("Translation Cache", test_translation_cache)
 
 
-print(f"\nResults: {25 - len(errors)} passed / {len(errors)} failed")
+# 26. Translation History
+def test_translation_history():
+    import tempfile, shutil, threading
+    from translation_history import TranslationHistory
+
+    # Use a temp directory to avoid polluting real data
+    tmp = tempfile.mkdtemp()
+    try:
+        # Monkey-patch file_path
+        th = TranslationHistory.__new__(TranslationHistory)
+        th.max_size = 5
+        th.entries = []
+        th.file_path = os.path.join(tmp, "translation_history.json")
+        th._lock = threading.Lock()
+
+        # Empty state
+        assert th.count == 0
+        assert th.get_recent() == []
+        assert th.search("hello") == []
+
+        # Add entries
+        th.add("hello", "你好", model="gpt-4")
+        assert th.count == 1
+        entries = th.get_recent(1)
+        assert entries[0]["source"] == "hello"
+        assert entries[0]["result"] == "你好"
+        assert entries[0]["model"] == "gpt-4"
+        assert "time" in entries[0]
+
+        th.add("world", "世界", model="claude")
+        assert th.count == 2
+
+        # Dedup: re-adding "hello" should move it to front
+        th.add("hello", "你好 updated")
+        assert th.count == 2
+        entries = th.get_recent(2)
+        assert entries[0]["source"] == "hello"
+        assert entries[0]["result"] == "你好 updated"
+
+        # Search by source
+        results = th.search("world")
+        assert len(results) == 1
+        assert results[0]["source"] == "world"
+
+        # Search by result
+        results = th.search("你好")
+        assert len(results) == 1
+        assert results[0]["source"] == "hello"
+
+        # Max size eviction
+        th.add("a", "A")
+        th.add("b", "B")
+        th.add("c", "C")  # should evict oldest
+        assert th.count == 5
+        # "hello" (re-added most recently) should still be there
+        sources = [e["source"] for e in th.get_recent(10)]
+        assert "hello" in sources
+
+        # Empty source should be ignored
+        th.add("", "nothing")
+        assert th.count == 5
+
+        # Persistence: reload from file
+        th2 = TranslationHistory.__new__(TranslationHistory)
+        th2.max_size = 5
+        th2.entries = []
+        th2.file_path = th.file_path
+        th2._lock = threading.Lock()
+        th2._load()
+        assert th2.count == th.count
+        assert th2.entries[0]["source"] == th.entries[0]["source"]
+
+        # Thread safety
+        th3 = TranslationHistory.__new__(TranslationHistory)
+        th3.max_size = 100
+        th3.entries = []
+        th3.file_path = os.path.join(tmp, "thread_test.json")
+        th3._lock = threading.Lock()
+        errs = []
+
+        def writer():
+            for i in range(50):
+                try:
+                    th3.add(f"word{i}", f"结果{i}")
+                except Exception as e:
+                    errs.append(e)
+
+        def reader():
+            for i in range(50):
+                try:
+                    th3.get_recent(5)
+                    th3.search("word")
+                except Exception as e:
+                    errs.append(e)
+
+        ts = [threading.Thread(target=writer), threading.Thread(target=reader)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        assert not errs, f"Thread errors: {errs}"
+        assert th3.count == 50
+
+        # Clear
+        th.clear()
+        assert th.count == 0
+        assert th.get_recent() == []
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+test("Translation History", test_translation_history)
+
+
+print(f"\nResults: {26 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

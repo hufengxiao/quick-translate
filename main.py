@@ -101,6 +101,7 @@ def main():
     from dictionary import Dictionary
     from translator import AITranslator, MultiAITranslator
     from history import SearchHistory
+    from translation_history import TranslationHistory
     from vocabulary import VocabularyBook
     from stats import SearchStats
     from tray import SystemTrayIcon
@@ -161,6 +162,9 @@ def main():
     # 查词历史
     history = SearchHistory(max_size=50)
 
+    # AI 翻译历史
+    translation_history = TranslationHistory(max_size=200)
+
     # 生词本
     vocabulary = VocabularyBook(max_size=500)
 
@@ -174,7 +178,7 @@ def main():
             search_stats.record(query)
         return results
 
-    # 翻译函数
+    # 翻译函数（自动保存翻译结果到历史）
     def translate(text, callback, error_callback):
         if not ai.is_configured:
             error_callback("AI 翻译未配置")
@@ -182,7 +186,13 @@ def main():
         if not cfg["ai"]["enabled"]:
             error_callback("AI 翻译已禁用")
             return
-        ai.translate(text, callback, error_callback)
+
+        def wrapped_callback(result):
+            model_name = ai.current_provider_name if hasattr(ai, "current_provider_name") else ""
+            translation_history.add(text, result, model=model_name)
+            callback(result)
+
+        ai.translate(text, wrapped_callback, error_callback)
 
     # 构建 UI
     ui = SpotlightUI(cfg, on_search=search, on_translate=translate,
