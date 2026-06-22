@@ -6,10 +6,15 @@ import os
 
 # Windows constants
 NIM_ADD = 0x00000000
+NIM_MODIFY = 0x00000001
 NIM_DELETE = 0x00000002
 NIF_MESSAGE = 0x00000001
 NIF_ICON = 0x00000002
 NIF_TIP = 0x00000004
+NIF_INFO = 0x00000010
+NIIF_INFO = 0x00000001
+NIIF_WARNING = 0x00000002
+NIIF_ERROR = 0x00000003
 WM_TRAYICON = 0x0400 + 1
 WM_LBUTTONUP = 0x0202
 WM_RBUTTONUP = 0x0205
@@ -86,6 +91,32 @@ class SystemTrayIcon:
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def show_notification(self, title, message, timeout_ms=10000, icon_type="info"):
+        """Show a balloon notification from the system tray icon.
+
+        Args:
+            title: Notification title (max 63 chars)
+            message: Notification body (max 255 chars)
+            timeout_ms: Display duration in ms (10000-30000, Windows may override)
+            icon_type: "info", "warning", or "error"
+        """
+        if not self._running or not self._hwnd or not self._nid:
+            return False
+
+        icon_flags = {"info": NIIF_INFO, "warning": NIIF_WARNING, "error": NIIF_ERROR}
+        nid = NOTIFYICONDATA()
+        nid.cbSize = ctypes.sizeof(NOTIFYICONDATA)
+        nid.hWnd = self._hwnd
+        nid.uID = 1
+        nid.uFlags = NIF_INFO
+        nid.szInfoTitle = title[:63]
+        nid.szInfo = message[:255]
+        nid.uTimeoutOrVersion = max(10000, min(30000, timeout_ms))
+        nid.dwInfoFlags = icon_flags.get(icon_type, NIIF_INFO)
+
+        result = shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(nid))
+        return bool(result)
 
     def stop(self):
         self._running = False

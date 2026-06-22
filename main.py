@@ -274,6 +274,14 @@ def main():
         def _on_update(version, url):
             logger.info(f"发现新版本: v{version} — {url}")
             print(f"[QuickTranslate] 发现新版本 v{version}: {url}")
+            try:
+                tray.show_notification(
+                    "Quick Translate — 发现新版本",
+                    f"新版本 v{version} 已发布！点击查看详情",
+                    timeout_ms=15000,
+                )
+            except Exception:
+                pass  # 通知失败不影响主程序
         update_checker = UpdateChecker(on_update=_on_update)
         update_checker.check_async()
     except Exception:

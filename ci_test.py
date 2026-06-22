@@ -1341,7 +1341,40 @@ def test_config_context_menu():
 test("Config Context Menu", test_config_context_menu)
 
 
-print(f"\nResults: {32 - len(errors)} passed / {len(errors)} failed")
+# 33. System notification (系统通知)
+def test_system_notification():
+    from tray import SystemTrayIcon, NIM_MODIFY, NIF_INFO, NIIF_INFO, NIIF_WARNING, NIIF_ERROR
+
+    # Constants should be defined
+    assert NIM_MODIFY == 0x00000001
+    assert NIF_INFO == 0x00000010
+    assert NIIF_INFO == 0x00000001
+    assert NIIF_WARNING == 0x00000002
+    assert NIIF_ERROR == 0x00000003
+
+    # show_notification should exist on SystemTrayIcon
+    assert hasattr(SystemTrayIcon, "show_notification")
+
+    # When tray is not started, show_notification should return False
+    tray = SystemTrayIcon(tooltip="Test")
+    result = tray.show_notification("Title", "Message")
+    assert result is False, "Should return False when tray is not running"
+
+    # Test with various icon types (all should return False without running tray)
+    assert tray.show_notification("Title", "Message", icon_type="warning") is False
+    assert tray.show_notification("Title", "Message", icon_type="error") is False
+    assert tray.show_notification("Title", "Message", icon_type="info") is False
+
+    # Timeout clamping: below 10000 -> 10000, above 30000 -> 30000
+    # (we can't test the actual Windows API, but the method should not crash)
+    assert tray.show_notification("Title", "Message", timeout_ms=5000) is False
+    assert tray.show_notification("Title", "Message", timeout_ms=60000) is False
+
+
+test("System Notification", test_system_notification)
+
+
+print(f"\nResults: {33 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
