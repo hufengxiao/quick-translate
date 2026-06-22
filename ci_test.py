@@ -395,6 +395,73 @@ def test_vocabulary():
 test("Vocabulary Book", test_vocabulary)
 
 
+# 18. Vocabulary Export
+def test_vocabulary_export():
+    from vocabulary import VocabularyBook
+    import tempfile, os
+    tmpdir = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdir, "vocabulary.json")
+    vb = VocabularyBook.__new__(VocabularyBook)
+    vb.max_size = 500
+    vb.entries = []
+    vb.file_path = tmpfile
+
+    vb.add("hello", "你好")
+    vb.add("world", "世界")
+    vb.add("apple", "苹果")
+
+    # CSV export
+    csv_content = vb.export_csv()
+    assert "Word,Definition,Added" in csv_content
+    assert "hello" in csv_content
+    assert "世界" in csv_content
+    lines = csv_content.strip().split("\n")
+    assert len(lines) == 4  # header + 3 entries
+
+    # Anki export
+    anki_content = vb.export_anki()
+    assert "hello\t你好" in anki_content
+    assert "world\t世界" in anki_content
+    anki_lines = anki_content.strip().split("\n")
+    assert len(anki_lines) == 3
+
+    # Export to file (CSV)
+    csv_path = os.path.join(tmpdir, "export.csv")
+    returned = vb.export_to_file(csv_path, fmt="csv")
+    assert returned.endswith(".csv")
+    assert os.path.exists(returned)
+    with open(returned, "r", encoding="utf-8") as f:
+        assert "hello" in f.read()
+
+    # Export to file (Anki) — auto-appends .txt
+    anki_path = os.path.join(tmpdir, "export.txt")
+    returned2 = vb.export_to_file(anki_path, fmt="anki")
+    assert returned2.endswith(".txt")
+    assert os.path.exists(returned2)
+    with open(returned2, "r", encoding="utf-8") as f:
+        content = f.read()
+        assert "hello\t你好" in content
+
+    # Auto-extension: if no .txt, Anki export should add it
+    anki_path2 = os.path.join(tmpdir, "anki_export")
+    returned3 = vb.export_to_file(anki_path2, fmt="anki")
+    assert returned3.endswith(".txt")
+
+    # Empty vocab export
+    vb.clear()
+    empty_csv = vb.export_csv()
+    assert "Word,Definition,Added" in empty_csv
+    assert len(empty_csv.strip().split("\n")) == 1  # header only
+    empty_anki = vb.export_anki()
+    assert empty_anki == ""
+
+    import shutil
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+test("Vocabulary Export", test_vocabulary_export)
+
+
 # 14. Startup benchmark
 def test_startup():
     import subprocess
@@ -438,7 +505,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {19 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {20 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)
