@@ -101,6 +101,7 @@ def main():
     from dictionary import Dictionary
     from translator import AITranslator
     from history import SearchHistory
+    from vocabulary import VocabularyBook
     from tray import SystemTrayIcon
     from error_handler import ErrorHandler
     from ui import SpotlightUI
@@ -150,6 +151,9 @@ def main():
     # 查词历史
     history = SearchHistory(max_size=50)
 
+    # 生词本
+    vocabulary = VocabularyBook(max_size=500)
+
     # 搜索函数
     def search(query: str):
         return dictionary.search_fuzzy(query, limit=20)
@@ -165,7 +169,8 @@ def main():
         ai.translate(text, callback, error_callback)
 
     # 构建 UI
-    ui = SpotlightUI(cfg, on_search=search, on_translate=translate, history=history)
+    ui = SpotlightUI(cfg, on_search=search, on_translate=translate,
+                     history=history, vocabulary=vocabulary)
 
     # 热键
     def on_hotkey():

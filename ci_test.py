@@ -338,6 +338,63 @@ test("Pinyin Search", test_pinyin_search)
 test("Relevance Sorting", test_relevance_sorting)
 
 
+# 17. Vocabulary Book
+def test_vocabulary():
+    from vocabulary import VocabularyBook
+    import tempfile, os
+    # Use a temp file to avoid polluting real data
+    tmpdir = tempfile.mkdtemp()
+    tmpfile = os.path.join(tmpdir, "vocabulary.json")
+    vb = VocabularyBook.__new__(VocabularyBook)
+    vb.max_size = 500
+    vb.entries = []
+    vb.file_path = tmpfile
+
+    # Add a word
+    vb.add("hello", "你好")
+    assert vb.count == 1
+    assert vb.is_favorited("hello") is True
+    assert vb.is_favorited("world") is False
+
+    # Toggle off
+    result = vb.toggle("hello", "你好")
+    assert result is False
+    assert vb.count == 0
+    assert vb.is_favorited("hello") is False
+
+    # Toggle on
+    result = vb.toggle("world", "世界")
+    assert result is True
+    assert vb.count == 1
+
+    # Add duplicate (moves to top)
+    vb.add("hello", "你好")
+    vb.add("hello", "你好 updated")
+    assert vb.count == 2
+    entries = vb.get_all()
+    assert entries[0]["word"] == "hello"
+
+    # Search
+    r = vb.search("hel")
+    assert len(r) == 1 and r[0]["word"] == "hello"
+
+    # Remove
+    vb.remove("hello")
+    assert vb.count == 1
+    assert vb.is_favorited("hello") is False
+
+    # Clear
+    vb.clear()
+    assert vb.count == 0
+
+    # Cleanup
+    import shutil
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+test("Vocabulary Book", test_vocabulary)
+
+
 # 14. Startup benchmark
 def test_startup():
     import subprocess
@@ -381,7 +438,7 @@ def test_query_perf():
 
 test("Query Perf", test_query_perf)
 
-print(f"\nResults: {18 - len(errors)} passed / {len(errors)} failed")
+print(f"\nResults: {19 - len(errors)} passed / {len(errors)} failed")
 if errors:
     print(f"Failures: {errors}")
     sys.exit(1)

@@ -64,11 +64,12 @@ class SpotlightUI:
     def __init__(self, config: dict,
                  on_search: Callable[[str], List[Dict[str, str]]],
                  on_translate: Callable[[str, Callable, Optional[Callable]], None],
-                 history=None):
+                 history=None, vocabulary=None):
         self.cfg = config
         self.on_search = on_search
         self.on_translate = on_translate
         self.history = history
+        self.vocabulary = vocabulary
 
         # 设计系统
         theme_name = config.get("ui", {}).get("theme", "dark")
@@ -418,8 +419,30 @@ class SpotlightUI:
             font=s.get_font('result_title', 'bold'),
             bg=p.bg_primary, fg=p.accent_primary, anchor="w",
         )
-        self.def_title.pack(fill=tk.X, pady=(0, 2))
+        # Title row with favorite button
+        self._title_row = tk.Frame(self._def_frame, bg=p.bg_primary)
+        self._title_row.pack(fill=tk.X, pady=(0, 2))
+        self._bind_drag(self._title_row)
+
+        self.def_title = tk.Label(
+            self._title_row, text="输入单词开始查询…",
+            font=s.get_font('result_title', 'bold'),
+            bg=p.bg_primary, fg=p.accent_primary, anchor="w",
+        )
+        self.def_title.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._bind_drag(self.def_title)
+
+        self._fav_btn = tk.Label(
+            self._title_row, text="☆", font=("Segoe UI Emoji", 14),
+            bg=p.bg_primary, fg=p.text_tertiary, cursor="hand2", padx=4,
+        )
+        self._fav_btn.pack(side=tk.RIGHT)
+        self._fav_btn.bind("<Button-1>", self._on_toggle_favorite)
+        self._fav_btn.bind("<Enter>", lambda e: self._fav_btn.config(fg=p.accent_primary))
+        self._fav_btn.bind("<Leave>", lambda e: self._fav_btn.config(
+            fg=p.accent_primary if (self.vocabulary and self.vocabulary.is_favorited(
+                self.def_title.cget("text"))) else p.text_tertiary))
+        self._current_detail_word = ""
 
         self.def_text = tk.Text(
             self._def_frame, font=s.get_font('result_body'),
@@ -586,6 +609,8 @@ class SpotlightUI:
     def _trigger_ai(self, query: str):
         self._set_definition("🤖 AI 翻译中…", f'正在翻译 "{query}"，请稍候…')
         self._show_detail_mode()
+        self._current_detail_word = query
+        self._update_fav_button()
         self.on_translate(query, self._on_ai_result, self._on_ai_error)
 
     def _on_ai_result(self, text: str):
@@ -629,8 +654,33 @@ class SpotlightUI:
             defn = m.get("text") or m.get("definition", "无释义")
             self._set_definition(word, defn)
             self._show_detail_mode()  # 切换到详情面板
+            self._current_detail_word = word
+            self._update_fav_button()
             if record_history and self.history:
                 self.history.add(word, m.get("definition", "")[:80])
+
+    def _update_fav_button(self):
+        """Update the favorite button appearance based on current word."""
+        if not self.vocabulary:
+            return
+        word = self._current_detail_word
+        if word and self.vocabulary.is_favorited(word):
+            self._fav_btn.config(text="★", fg=self.p.accent_primary)
+        else:
+            self._fav_btn.config(text="☆", fg=self.p.text_tertiary)
+
+    def _on_toggle_favorite(self, event=None):
+        """Toggle favorite status for the current word."""
+        if not self.vocabulary or not self._current_detail_word:
+            return
+        word = self._current_detail_word
+        content = self.def_text.get("1.0", tk.END).strip()
+        now_fav = self.vocabulary.toggle(word, content)
+        self._update_fav_button()
+        if now_fav:
+            self._show_toast(f"已收藏 \"{word}\" ★", 1500)
+        else:
+            self._show_toast(f"已取消收藏 \"{word}\"", 1500)
 
     def _set_definition(self, title: str, content: str):
         self.def_title.config(text=title)
