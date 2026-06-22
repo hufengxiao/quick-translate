@@ -44,7 +44,7 @@
 
 ---
 
-## Milestone 2: Enhanced Experience
+## Milestone 2: Enhanced Experience ✅
 
 ### Phase 6: Search Intelligence ✅
 **Goal:** 搜索更智能，容错更强
@@ -88,13 +88,13 @@
 - [x] 近义词/反义词：显示相关词汇
 - [x] 常用搭配：显示词组搭配
 
-### Phase 10: Distribution & Polish
+### Phase 10: Distribution & Polish ✅
 **Goal:** 更好的分发和用户体验
-**Status:** PLANNED
+**Status:** DONE
 
 - [x] 安装程序美化：自定义安装界面
 - [x] 开机自启选项
 - [x] 全局右键菜单：选中文字右键翻译
 - [x] 系统通知：更新提醒用系统通知
 - [x] 多语言界面：UI 支持英文/中文切换
-- [ ] 崩溃报告：自动收集错误信息
+- [x] 崩溃报告：自动收集错误信息
