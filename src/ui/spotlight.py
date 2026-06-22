@@ -1,6 +1,7 @@
 """Spotlight-style UI - Apple HIG design, smooth animations, modern layout."""
 from __future__ import annotations
 import ctypes
+import re
 import tkinter as tk
 from tkinter import font as tkfont
 import traceback
@@ -10,6 +11,92 @@ from .theme import Theme, DARK, get_theme
 from .animator import Animator
 from .layout import Spacing, Sizes, Fonts
 from ..utils.logging import logger
+
+# POS tag patterns for extraction from definition text
+_POS_PATTERN = re.compile(
+    r'^(?:'
+    r'(?:adj|adv|n|v|vt|vi|prep|conj|pron|det|art|aux|int|abbr|num|pl|sing)\.'
+    r'(?:\s+(?:adj|adv|n|v|vt|vi|prep|conj|pron|det|art|aux|int|abbr|num|pl|sing)\.)*'
+    r')',
+    re.IGNORECASE,
+)
+
+# Map verbose POS to compact labels
+_POS_SHORT = {
+    'adj.': 'adj.', 'adjective.': 'adj.',
+    'adv.': 'adv.', 'adverb.': 'adv.',
+    'n.': 'n.', 'noun.': 'n.',
+    'v.': 'v.', 'verb.': 'v.',
+    'vt.': 'vt.', 'transitive.': 'vt.',
+    'vi.': 'vi.', 'intransitive.': 'vi.',
+    'prep.': 'prep.', 'preposition.': 'prep.',
+    'conj.': 'conj.', 'conjunction.': 'conj.',
+    'pron.': 'pron.', 'pronoun.': 'pron.',
+    'det.': 'det.', 'determiner.': 'det.',
+    'art.': 'art.', 'article.': 'art.',
+    'aux.': 'aux.', 'auxiliary.': 'aux.',
+    'int.': 'int.', 'interjection.': 'int.',
+    'abbr.': 'abbr.', 'abbreviation.': 'abbr.',
+    'num.': 'num.', 'number.': 'num.',
+    'pl.': 'pl.', 'plural.': 'pl.',
+    'sing.': 'sing.', 'singular.': 'sing.',
+}
+
+# Canonical display order for POS tags
+_POS_ORDER = {'n.': 0, 'v.': 1, 'vt.': 2, 'vi.': 3, 'adj.': 4, 'adv.': 5,
+              'prep.': 6, 'conj.': 7, 'pron.': 8, 'det.': 9, 'art.': 10,
+              'aux.': 11, 'int.': 12, 'abbr.': 13, 'num.': 14, 'pl.': 15, 'sing.': 16}
+
+
+def _extract_pos(text: str) -> str:
+    """Extract part-of-speech tags from definition text.
+
+    Returns a compact POS string like 'n.' or 'v. adj.' or '' if not found.
+    Works with both MDX text (which has explicit POS lines) and JSON dict definitions.
+    """
+    if not text:
+        return ''
+
+    # Check first non-empty line for POS patterns
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Try matching POS abbreviations at the start of the line
+        m = _POS_PATTERN.match(line)
+        if m:
+            raw = m.group(0)
+            # Normalize each tag
+            tags = re.findall(r'(adj|adv|n|v|vt|vi|prep|conj|pron|det|art|aux|int|abbr|num|pl|sing)\.',
+                              raw, re.IGNORECASE)
+            seen = set()
+            unique_tags = []
+            for t in tags:
+                norm = t.lower() + '.'
+                if norm not in seen:
+                    seen.add(norm)
+                    unique_tags.append(norm)
+            if unique_tags:
+                # Sort by canonical order
+                unique_tags.sort(key=lambda t: _POS_ORDER.get(t, 99))
+                return ' '.join(unique_tags)
+
+        # Check for Chinese POS patterns like "名词" "动词" "形容词"
+        cn_pos_map = {'名词': 'n.', '动词': 'v.', '及物动词': 'vt.', '不及物动词': 'vi.',
+                      '形容词': 'adj.', '副词': 'adv.', '介词': 'prep.', '连词': 'conj.',
+                      '代词': 'pron.', '感叹词': 'int.', '数词': 'num.'}
+        cn_tags = []
+        for cn, en in cn_pos_map.items():
+            if cn in line:
+                cn_tags.append(en)
+        if cn_tags:
+            return ' '.join(cn_tags)
+
+        # Only check the first meaningful line
+        break
+
+    return ''
 
 
 class SpotlightUI:
@@ -366,10 +453,12 @@ class SpotlightUI:
 
         for m in self._matches:
             word = m["word"]
+            pos = m.get("pos", "") or _extract_pos(m.get("definition", ""))
             defn = m.get("definition", "").split("\n")[0]
             if len(defn) > 22:
                 defn = defn[:22] + "\u2026"
-            self.listbox.insert(tk.END, f"  {word}  {defn}")
+            pos_display = f"  {pos}" if pos else ""
+            self.listbox.insert(tk.END, f"  {word}{pos_display}  {defn}")
 
         self.listbox.selection_set(0)
         self.listbox.activate(0)

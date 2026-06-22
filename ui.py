@@ -1,4 +1,5 @@
 """主窗口 UI - Apple Spotlight 风格（使用设计系统）"""
+import re
 import tkinter as tk
 from tkinter import font as tkfont
 import ctypes
@@ -7,6 +8,54 @@ from typing import Optional, Callable, List, Dict
 
 from styles import StyleManager
 from animations import AnimationEngine
+
+# POS tag extraction pattern (same as src/ui/spotlight.py)
+_POS_PATTERN = re.compile(
+    r'^(?:'
+    r'(?:adj|adv|n|v|vt|vi|prep|conj|pron|det|art|aux|int|abbr|num|pl|sing)\.'
+    r'(?:\s+(?:adj|adv|n|v|vt|vi|prep|conj|pron|det|art|aux|int|abbr|num|pl|sing)\.)*'
+    r')',
+    re.IGNORECASE,
+)
+
+
+def _extract_pos(text: str) -> str:
+    """Extract part-of-speech tags from definition text.
+
+    Returns a compact POS string like 'n.' or 'v. adj.' or '' if not found.
+    """
+    if not text:
+        return ''
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        m = _POS_PATTERN.match(line)
+        if m:
+            raw = m.group(0)
+            tags = re.findall(r'(adj|adv|n|v|vt|vi|prep|conj|pron|det|art|aux|int|abbr|num|pl|sing)\.',
+                              raw, re.IGNORECASE)
+            seen = set()
+            unique_tags = []
+            for t in tags:
+                norm = t.lower() + '.'
+                if norm not in seen:
+                    seen.add(norm)
+                    unique_tags.append(norm)
+            if unique_tags:
+                return ' '.join(unique_tags)
+        # Check for Chinese POS patterns
+        cn_pos_map = {'名词': 'n.', '动词': 'v.', '及物动词': 'vt.', '不及物动词': 'vi.',
+                      '形容词': 'adj.', '副词': 'adv.', '介词': 'prep.', '连词': 'conj.',
+                      '代词': 'pron.', '感叹词': 'int.', '数词': 'num.'}
+        cn_tags = []
+        for cn, en in cn_pos_map.items():
+            if cn in line:
+                cn_tags.append(en)
+        if cn_tags:
+            return ' '.join(cn_tags)
+        break
+    return ''
 
 
 class SpotlightUI:
@@ -466,14 +515,16 @@ class SpotlightUI:
 
         for m in display:
             word = m["word"]
+            pos = m.get("pos", "") or _extract_pos(m.get("definition", ""))
             phon = m.get("phonetic", "")
             defn = m.get("definition", "").split("\n")[0]
             if len(defn) > 22:
                 defn = defn[:22] + "…"
+            pos_display = f"  {pos}" if pos else ""
             if phon:
-                self.listbox.insert(tk.END, f"  {word}  {phon}  {defn}")
+                self.listbox.insert(tk.END, f"  {word}{pos_display}  {phon}  {defn}")
             else:
-                self.listbox.insert(tk.END, f"  {word}  {defn}")
+                self.listbox.insert(tk.END, f"  {word}{pos_display}  {defn}")
 
         # 自动选中第一项（但不显示详情，保持列表模式）
         self.listbox.selection_set(0)

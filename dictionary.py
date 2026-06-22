@@ -188,6 +188,7 @@ class Dictionary:
                     "word": entry["word"],
                     "definition": entry["definition"],
                     "phonetic": entry.get("phonetic", ""),
+                    "pos": entry.get("pos", ""),
                     "text": entry.get("text", ""),
                     "match_type": "exact",
                 })
